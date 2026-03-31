@@ -6,6 +6,16 @@ flask_session/
 # Local database (contains data and passwords)
 taskun.sqlite
 
+# Django local DB / artifacts
+backend/db.sqlite3
+backend/**/__pycache__/
+
+# Frontend artifacts
+frontend/node_modules/
+frontend/dist/
+frontend/.env
+frontend/.env.*
+
 # IDE / OS
 .vscode/
 .idea/
