@@ -1,0 +1,269 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <div class="card" style="margin-bottom: 16px;">
+    <h2 style="margin-top: 0;">Панель проектов</h2>
+
+    <form method="get" action="{{ url_for('projects') }}">
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+        <div>
+          <div class="muted" style="margin-bottom: 6px;">Вид договора</div>
+          <select multiple name="contract_kind" size="6">
+            {% for k in all_kinds %}
+              <option value="{{ k }}" {% if k in contract_kinds %}selected{% endif %}>{{ k }}</option>
+            {% endfor %}
+          </select>
+          <div class="muted" style="font-size: 12px;">Множественный выбор</div>
+        </div>
+        <div>
+          <div class="muted" style="margin-bottom: 6px;">Организация исполнитель</div>
+          <select multiple name="executant_name" size="6">
+            {% for ex in all_executants %}
+              <option value="{{ ex }}" {% if ex in executant_names %}selected{% endif %}>{{ ex }}</option>
+            {% endfor %}
+          </select>
+          <div class="muted" style="font-size: 12px;">Множественный выбор</div>
+        </div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px;">
+        <div>
+          <div class="muted" style="margin-bottom: 6px;">Период (dd.mm.YYYY)</div>
+          <div class="field" style="margin-bottom: 6px;">
+            <label>Начало</label>
+            <input type="text" name="period_start" value="{{ period_start }}" placeholder="dd.mm.YYYY" />
+          </div>
+          <div class="field">
+            <label>Окончание</label>
+            <input type="text" name="period_end" value="{{ period_end }}" placeholder="dd.mm.YYYY" />
+          </div>
+          <div class="muted" style="font-size: 12px;">
+            Дата начала и окончания проекта должна попадать внутрь диапазона.
+          </div>
+        </div>
+        <div>
+          <div class="muted" style="margin-bottom: 6px;">Статус проекта</div>
+          <select multiple name="project_status" size="6">
+            {% for s in all_statuses %}
+              <option value="{{ s }}" {% if s in statuses %}selected{% endif %}>{{ s }}</option>
+            {% endfor %}
+          </select>
+          <div class="muted" style="font-size: 12px;">Множественный выбор</div>
+        </div>
+      </div>
+
+      {% if role == 'Директор' %}
+        <div style="margin-top: 12px;">
+          <div class="muted" style="margin-bottom: 6px;">Руководитель проектов</div>
+          <select multiple name="project_chief" size="6">
+            {% for ch in all_project_chiefs %}
+              <option value="{{ ch }}" {% if ch in project_chiefs %}selected{% endif %}>{{ ch }}</option>
+            {% endfor %}
+          </select>
+          <div class="muted" style="font-size: 12px;">Множественный выбор</div>
+        </div>
+      {% endif %}
+
+      <div class="actions">
+        <button type="submit">Применить фильтры</button>
+        <a href="{{ url_for('projects') }}">Сбросить</a>
+      </div>
+    </form>
+  </div>
+
+  <div class="card">
+    <div style="display:flex; align-items:center; justify-content:space-between; gap: 12px; flex-wrap: wrap;">
+      <h2 style="margin-top: 0;">Список проектов</h2>
+      {% if role == 'Директор' %}
+        <button type="button" onclick="window.__openCreateProjectDialog && window.__openCreateProjectDialog()">Создать проект</button>
+      {% endif %}
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>Номер договора</th>
+          <th>Этап</th>
+          {% if role == 'Директор' %}
+            <th>Руководитель проекта</th>
+          {% endif %}
+          <th>Вид договора</th>
+          <th>Заказчик</th>
+          <th>Исполнитель</th>
+          <th>План. дата начала</th>
+          <th>План. дата окончания</th>
+          <th>Статус</th>
+          {% if role == 'Директор' %}
+            <th>Действия</th>
+            <th>Дата акта</th>
+          {% endif %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in projects %}
+          {% if role == 'Директор' %}
+            <tr>
+              <form method="post" action="{{ url_for('update_project') }}">
+                <td>
+                  {{ p.contract_number }}
+                  <input type="hidden" name="contract_number" value="{{ p.contract_number }}" />
+                </td>
+                <td>
+                  {{ p.etap_number }}
+                  <input type="hidden" name="etap_number" value="{{ p.etap_number }}" />
+                </td>
+                <td>{{ p.project_chief }}</td>
+                <td>{{ p.contract_kind }}</td>
+                <td>{{ p.client_name }}</td>
+                <td>{{ p.executant_name }}</td>
+                <td>
+                  <input type="text" name="plan_start_date" value="{{ p.plan_start_date|format_date }}" placeholder="dd.mm.YYYY" />
+                </td>
+                <td>
+                  <input type="text" name="plan_end_date" value="{{ p.plan_end_date|format_date }}" placeholder="dd.mm.YYYY" />
+                </td>
+                <td>
+                  <select name="project_status">
+                    {% for s in status_catalog %}
+                      <option value="{{ s }}" {% if s == p.project_status %}selected{% endif %}>{{ s }}</option>
+                    {% endfor %}
+                  </select>
+                </td>
+                <td>
+                  <div class="actions" style="margin: 0;">
+                    <a href="{{ url_for('project_card', contract_number=p.contract_number, etap_number=p.etap_number) }}">Открыть</a>
+                    <button type="submit">Сохранить</button>
+                  </div>
+                </td>
+                <td>
+                  <input type="text" name="act_date" value="{{ p.act_date|format_date }}" placeholder="dd.mm.YYYY" />
+                </td>
+              </form>
+            </tr>
+          {% else %}
+            <tr style="cursor: pointer;" onclick="window.location.href='{{ url_for('project_card', contract_number=p.contract_number, etap_number=p.etap_number) }}'">
+              <td>{{ p.contract_number }}</td>
+              <td>{{ p.etap_number }}</td>
+            {% if role == 'Директор' %}
+              <td>{{ p.project_chief }}</td>
+            {% endif %}
+            <td>{{ p.contract_kind }}</td>
+            <td>{{ p.client_name }}</td>
+            <td>{{ p.executant_name }}</td>
+            <td>{{ p.plan_start_date|format_date }}</td>
+            <td>{{ p.plan_end_date|format_date }}</td>
+            <td>{{ p.project_status }}</td>
+            </tr>
+          {% endif %}
+        {% else %}
+          <tr>
+            <td colspan="{{ 8 + (2 if role == 'Директор' else 0) + (1 if role == 'Директор' else 0) }}" class="muted">Нет данных по фильтрам.</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if role == 'Директор' %}
+    <dialog id="createProjectDialog" style="max-width: 900px; width: 95%;">
+      <form method="post" action="{{ url_for('create_project_post') }}">
+        <div style="display:flex; align-items:center; justify-content:space-between; gap: 12px;">
+          <h3 style="margin: 0;">Создание проекта</h3>
+          <button type="button" class="btn-link" onclick="window.__closeCreateProjectDialog && window.__closeCreateProjectDialog()">Закрыть</button>
+        </div>
+        <div class="muted" style="margin-top: 8px;">Поля соответствуют столбцам таблицы проектов (projects_sheet).</div>
+
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px;">
+          <div class="field">
+            <label>Номер договора *</label>
+            <input type="text" name="contract_number" required />
+          </div>
+          <div class="field">
+            <label>Этап *</label>
+            <input type="text" name="etap_number" required />
+          </div>
+
+          <div class="field">
+            <label>Руководитель проекта (project_chief)</label>
+            <input type="text" name="project_chief" />
+          </div>
+          <div class="field">
+            <label>Вид договора (contract_kind)</label>
+            <input type="text" name="contract_kind" />
+          </div>
+
+          <div class="field">
+            <label>Заказчик (client_name)</label>
+            <input type="text" name="client_name" />
+          </div>
+          <div class="field">
+            <label>Исполнитель (executant_name)</label>
+            <input type="text" name="executant_name" />
+          </div>
+
+          <div class="field">
+            <label>Дата начала договора (contract_start_date, dd.mm.YYYY)</label>
+            <input type="text" name="contract_start_date" placeholder="dd.mm.YYYY" />
+          </div>
+          <div class="field">
+            <label>Дата окончания договора (contract_end_date, dd.mm.YYYY)</label>
+            <input type="text" name="contract_end_date" placeholder="dd.mm.YYYY" />
+          </div>
+
+          <div class="field">
+            <label>План. дата начала (plan_start_date, dd.mm.YYYY)</label>
+            <input type="text" name="plan_start_date" placeholder="dd.mm.YYYY" />
+          </div>
+          <div class="field">
+            <label>План. дата окончания (plan_end_date, dd.mm.YYYY)</label>
+            <input type="text" name="plan_end_date" placeholder="dd.mm.YYYY" />
+          </div>
+
+          <div class="field">
+            <label>Статус проекта (project_status)</label>
+            <select name="project_status">
+              <option value="">—</option>
+              {% for s in status_catalog %}
+                <option value="{{ s }}">{{ s }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="field">
+            <label>Период (period)</label>
+            <input type="text" name="period" />
+          </div>
+
+          <div class="field">
+            <label>Сумма этапа (etap_sum)</label>
+            <input type="text" name="etap_sum" />
+          </div>
+          <div class="field">
+            <label>Сумма договора (contr_sum)</label>
+            <input type="text" name="contr_sum" />
+          </div>
+
+          <div class="field">
+            <label>Дата акта (act_date, dd.mm.YYYY)</label>
+            <input type="text" name="act_date" placeholder="dd.mm.YYYY" />
+          </div>
+        </div>
+
+        <div class="actions" style="justify-content: flex-end;">
+          <button type="submit">Сохранить</button>
+        </div>
+      </form>
+    </dialog>
+
+    <script>
+      (function () {
+        const dlg = document.getElementById('createProjectDialog');
+        window.__openCreateProjectDialog = function () {
+          if (dlg && dlg.showModal) dlg.showModal();
+        };
+        window.__closeCreateProjectDialog = function () {
+          if (dlg && dlg.close) dlg.close();
+        };
+      })();
+    </script>
+  {% endif %}
+{% endblock %}
+

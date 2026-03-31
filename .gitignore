@@ -1,0 +1,13 @@
+venv/
+__pycache__/
+*.pyc
+flask_session/
+
+# Local database (contains data and passwords)
+taskun.sqlite
+
+# IDE / OS
+.vscode/
+.idea/
+Thumbs.db
+Desktop.ini

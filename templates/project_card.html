@@ -1,0 +1,393 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <style>
+    .task-table-wrap { overflow-x: auto; }
+    .task-table { table-layout: fixed; min-width: 1800px; }
+    .task-table th, .task-table td { min-width: 220px; }
+  </style>
+  <div class="grid">
+    <div class="card">
+      <h2 style="margin-top: 0;">Информация о проекте</h2>
+
+      <div class="field"><strong>Номер договора:</strong> {{ project.contract_number }}</div>
+      <div class="field"><strong>Вид договора:</strong> {{ project.contract_kind }}</div>
+      <div class="field"><strong>Заказчик:</strong> {{ project.client_name }}</div>
+      <div class="field"><strong>Исполнитель:</strong> {{ project.executant_name }}</div>
+      <div class="field"><strong>Дата начала проекта:</strong> {{ project.plan_start_date|format_date }}</div>
+      <div class="field"><strong>Дата окончания проекта:</strong> {{ project.plan_end_date|format_date }}</div>
+      <div class="field"><strong>Статус проекта:</strong> {{ project.project_status }}</div>
+      <div class="field"><strong>Номер этапа:</strong> {{ etap_number or '—' }}</div>
+      <div class="field"><strong>Период проверки:</strong> {{ project.period }}</div>
+      <div class="field"><strong>Руководитель проекта:</strong> {{ project.project_chief }}</div>
+      <div class="field"><strong>Сумма по этапу:</strong> {{ project.etap_sum }}</div>
+    </div>
+
+    <div class="card">
+      <h2 style="margin-top: 0;">Проектное задание</h2>
+
+      <div class="muted" style="margin-bottom: 12px;">
+        contract_number: <strong>{{ contract_number }}</strong>
+        {% if etap_number %}, etap_number: <strong>{{ etap_number }}</strong>{% endif %}
+      </div>
+
+      {% if edit_mode == 'view' %}
+        <div class="muted" style="margin-bottom: 12px;">
+          Режим просмотра (редактирование недоступно).
+        </div>
+
+        {% if tasks|length == 0 %}
+          <div class="muted">Нет задач для выбранного проекта/этапа.</div>
+        {% else %}
+          <details open>
+            <summary>Этап {{ etap_number }} ({{ tasks|length }} задач)</summary>
+
+            <div class="task-table-wrap">
+            <table class="task-table">
+              <thead>
+                <tr>
+                  <th>Задача</th>
+                  <th>Описание</th>
+                  <th>Исполнитель</th>
+                  <th>Дата начала</th>
+                  <th>Дата окончания</th>
+                  <th>Комментарий</th>
+                  <th>Рабочий файл</th>
+                  <th>Статус</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for t in tasks %}
+                  <tr>
+                    <td>{{ t.task_name }}</td>
+                    <td>{{ t.task_adenda }}</td>
+                    <td>{{ t.worker_name }}</td>
+                    <td>{{ t.task_start_date|format_date }}</td>
+                    <td>{{ t.task_end_date|format_date }}</td>
+                    <td>{{ t.task_comment }}</td>
+                    <td>{{ t.working_file }}</td>
+                    <td>{{ t.task_status }}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+            </div>
+          </details>
+        {% endif %}
+
+      {% elif edit_mode == 'partial' %}
+        <div class="muted" style="margin-bottom: 12px;">
+          Режим частичного редактирования: доступны поля «Дата начала», «Дата окончания», «Комментарий», «Рабочий файл», «Статус».
+        </div>
+
+        <form method="post" action="{{ url_for('save_tasks', contract_number=contract_number, etap_number=etap_number) }}">
+          <input type="hidden" name="tasks_count" value="{{ tasks|length }}" />
+
+          {% if tasks|length == 0 %}
+            <div class="muted">Нет задач для выбранного проекта/этапа.</div>
+          {% else %}
+            <details open>
+              <summary>Этап {{ etap_number }} ({{ tasks|length }} задач)</summary>
+
+              <div class="task-table-wrap">
+              <table class="task-table">
+                <thead>
+                  <tr>
+                    <th>Задача</th>
+                    <th>Описание</th>
+                    <th>Исполнитель</th>
+                    <th>Дата начала</th>
+                    <th>Дата окончания</th>
+                    <th>Комментарий</th>
+                    <th>Рабочий файл</th>
+                    <th>Статус</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for t in tasks %}
+                    {% set i = loop.index0 %}
+                    <tr>
+                      <td>
+                        <input type="text" name="task_name_{{ i }}" value="{{ t.task_name }}" readonly />
+                      </td>
+                      <td>
+                        <textarea name="task_adenda_{{ i }}" readonly>{{ t.task_adenda }}</textarea>
+                      </td>
+                      <td>
+                        <div>{{ t.worker_name }}</div>
+                        <input type="hidden" name="worker_name_{{ i }}" value="{{ t.worker_name }}" />
+                      </td>
+                      <td>
+                        <input type="text" name="task_start_date_{{ i }}" value="{{ t.task_start_date|format_date }}" placeholder="dd.mm.YYYY" />
+                      </td>
+                      <td>
+                        <input type="text" name="task_end_date_{{ i }}" value="{{ t.task_end_date|format_date }}" placeholder="dd.mm.YYYY" />
+                      </td>
+                      <td>
+                        <input type="text" name="task_comment_{{ i }}" value="{{ t.task_comment }}" />
+                      </td>
+                      <td>
+                        <input type="text" name="working_file_{{ i }}" value="{{ t.working_file }}" />
+                      </td>
+                      <td>
+                        <select name="task_status_{{ i }}">
+                          {% for s in task_statuses %}
+                            <option value="{{ s }}" {% if s == t.task_status %}selected{% endif %}>{{ s }}</option>
+                          {% endfor %}
+                        </select>
+                      </td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+              </div>
+            </details>
+
+            <div class="actions" style="margin-top: 12px;">
+              <button type="submit">Сохранить</button>
+            </div>
+          {% endif %}
+        </form>
+
+      {% else %}
+        <div class="actions" style="margin-bottom: 12px;">
+          <form method="post" action="{{ url_for('upload_tasks', contract_number=contract_number, etap_number=etap_number) }}" enctype="multipart/form-data">
+            <input type="file" name="file" accept=".xlsx" required />
+            <button type="submit">Загрузить</button>
+          </form>
+        </div>
+
+        <div class="muted" style="margin-bottom: 8px;">
+          Добавление и удаление строк, сортировка — кнопки ниже и значки ⇅ в заголовках столбцов. Удаление: отметьте строку в колонке «Выбор», затем «Удалить задачу». Пустой список можно заполнить вручную или загрузить XLSX.
+        </div>
+
+        <form id="task-form-full" method="post" action="{{ url_for('save_tasks', contract_number=contract_number, etap_number=etap_number) }}">
+          <input type="hidden" name="tasks_count" id="tasks_count_full" value="{{ tasks|length }}" />
+
+          <div class="actions" style="margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
+            <button type="button" id="btn-add-task">Добавить задачу</button>
+            <button type="button" id="btn-del-task">Удалить задачу</button>
+          </div>
+
+          <details open>
+            <summary>Этап {{ etap_number }} (<span id="task-count-label">{{ tasks|length }}</span> задач)</summary>
+
+            <div class="task-table-wrap">
+            <table class="task-table" id="task-table-full">
+              <thead>
+                <tr>
+                  <th style="min-width: 48px;">Выбор</th>
+                  <th>Задача</th>
+                  <th>Описание</th>
+                  <th>
+                    Исполнитель
+                    <button type="button" class="btn-sort muted" data-sort-col="worker" title="Сортировать по исполнителю">⇅</button>
+                  </th>
+                  <th>
+                    Дата начала
+                    <button type="button" class="btn-sort muted" data-sort-col="start" title="Сортировать по дате начала">⇅</button>
+                  </th>
+                  <th>
+                    Дата окончания
+                    <button type="button" class="btn-sort muted" data-sort-col="end" title="Сортировать по дате окончания">⇅</button>
+                  </th>
+                  <th>Комментарий</th>
+                  <th>Рабочий файл</th>
+                  <th>
+                    Статус
+                    <button type="button" class="btn-sort muted" data-sort-col="status" title="Сортировать по статусу">⇅</button>
+                  </th>
+                </tr>
+              </thead>
+              <tbody id="task-table-body">
+                {% for t in tasks %}
+                  <tr class="task-row">
+                    <td><input type="radio" name="task_select" value="1" /></td>
+                    <td>
+                      <input type="text" data-task-field="task_name" value="{{ t.task_name }}" />
+                    </td>
+                    <td>
+                      <textarea data-task-field="task_adenda">{{ t.task_adenda }}</textarea>
+                    </td>
+                    <td>
+                      <select data-task-field="worker_name">
+                        <option value="">(не выбран)</option>
+                        {% for w in workers %}
+                          <option value="{{ w }}" {% if w == t.worker_name %}selected{% endif %}>{{ w }}</option>
+                        {% endfor %}
+                      </select>
+                    </td>
+                    <td>
+                      <input type="text" data-task-field="task_start_date" value="{{ t.task_start_date|format_date }}" placeholder="dd.mm.YYYY" />
+                    </td>
+                    <td>
+                      <input type="text" data-task-field="task_end_date" value="{{ t.task_end_date|format_date }}" placeholder="dd.mm.YYYY" />
+                    </td>
+                    <td>
+                      <input type="text" data-task-field="task_comment" value="{{ t.task_comment }}" />
+                    </td>
+                    <td>
+                      <input type="text" data-task-field="working_file" value="{{ t.working_file }}" />
+                    </td>
+                    <td>
+                      <select data-task-field="task_status">
+                        <option value="">(не выбран)</option>
+                        {% for s in task_statuses %}
+                          <option value="{{ s }}" {% if s == t.task_status %}selected{% endif %}>{{ s }}</option>
+                        {% endfor %}
+                      </select>
+                    </td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+            </div>
+          </details>
+
+          <div class="actions" style="margin-top: 12px;">
+            <button type="submit">Сохранить</button>
+          </div>
+        </form>
+
+        <script type="application/json" id="task-full-meta">{{ {'workers': workers, 'statuses': task_statuses}|tojson }}</script>
+        <script>
+        (function () {
+          var metaEl = document.getElementById('task-full-meta');
+          var meta = metaEl ? JSON.parse(metaEl.textContent) : { workers: [], statuses: [] };
+          var tbody = document.getElementById('task-table-body');
+          var form = document.getElementById('task-form-full');
+          var countInput = document.getElementById('tasks_count_full');
+          var countLabel = document.getElementById('task-count-label');
+          var sortState = { col: null, asc: true };
+
+          function escHtml(s) {
+            if (s == null || s === '') return '';
+            var d = document.createElement('div');
+            d.textContent = s;
+            return d.innerHTML;
+          }
+
+          function escAttr(s) {
+            return String(s == null ? '' : s)
+              .replace(/&/g, '&amp;')
+              .replace(/"/g, '&quot;')
+              .replace(/</g, '&lt;');
+          }
+
+          function workerOptionsHtml(selected) {
+            var opts = '<option value="">(не выбран)</option>';
+            (meta.workers || []).forEach(function (w) {
+              var sel = w === selected ? ' selected' : '';
+              opts += '<option value="' + escAttr(w) + '"' + sel + '>' + escHtml(w) + '</option>';
+            });
+            return opts;
+          }
+
+          function statusOptionsHtml(selected) {
+            var opts = '<option value="">(не выбран)</option>';
+            (meta.statuses || []).forEach(function (s) {
+              var sel = s === selected ? ' selected' : '';
+              opts += '<option value="' + escAttr(s) + '"' + sel + '>' + escHtml(s) + '</option>';
+            });
+            return opts;
+          }
+
+          function updateCountLabel() {
+            var n = tbody.querySelectorAll('tr.task-row').length;
+            if (countLabel) countLabel.textContent = String(n);
+            if (countInput) countInput.value = String(n);
+          }
+
+          function reindexTaskRows() {
+            var rows = tbody.querySelectorAll('tr.task-row');
+            if (countInput) countInput.value = String(rows.length);
+            rows.forEach(function (tr, i) {
+              tr.querySelectorAll('[data-task-field]').forEach(function (el) {
+                var base = el.getAttribute('data-task-field');
+                el.name = base + '_' + i;
+              });
+            });
+          }
+
+          function addTaskRow() {
+            var tr = document.createElement('tr');
+            tr.className = 'task-row';
+            tr.innerHTML =
+              '<td><input type="radio" name="task_select" value="1" /></td>' +
+              '<td><input type="text" data-task-field="task_name" value="" /></td>' +
+              '<td><textarea data-task-field="task_adenda"></textarea></td>' +
+              '<td><select data-task-field="worker_name">' + workerOptionsHtml('') + '</select></td>' +
+              '<td><input type="text" data-task-field="task_start_date" value="" placeholder="dd.mm.YYYY" /></td>' +
+              '<td><input type="text" data-task-field="task_end_date" value="" placeholder="dd.mm.YYYY" /></td>' +
+              '<td><input type="text" data-task-field="task_comment" value="" /></td>' +
+              '<td><input type="text" data-task-field="working_file" value="" /></td>' +
+              '<td><select data-task-field="task_status">' + statusOptionsHtml('') + '</select></td>';
+            tbody.appendChild(tr);
+            updateCountLabel();
+          }
+
+          function deleteSelectedTask() {
+            var checked = tbody.querySelector('tr.task-row input[name="task_select"]:checked');
+            if (!checked) {
+              alert('Выберите задачу для удаления (радиокнопка в колонке «Выбор»).');
+              return;
+            }
+            var tr = checked.closest('tr.task-row');
+            if (tr) tr.remove();
+            updateCountLabel();
+          }
+
+          function cellWorker(tr) {
+            var sel = tr.querySelector('select[data-task-field="worker_name"]');
+            return (sel && sel.value) ? sel.value : '';
+          }
+          function cellStatus(tr) {
+            var sel = tr.querySelector('select[data-task-field="task_status"]');
+            return (sel && sel.value) ? sel.value : '';
+          }
+          function cellDate(tr, field) {
+            var inp = tr.querySelector('input[data-task-field="' + field + '"]');
+            var v = (inp && inp.value) ? inp.value.trim() : '';
+            var m = v.match(/^(\d{2})-(\d{2})-(\d{4})$/);
+            if (m) return m[3] + '-' + m[2] + '-' + m[1];
+            return v || '';
+          }
+
+          function sortRows(col) {
+            if (sortState.col === col) sortState.asc = !sortState.asc;
+            else { sortState.col = col; sortState.asc = true; }
+            var asc = sortState.asc;
+            var rows = Array.prototype.slice.call(tbody.querySelectorAll('tr.task-row'));
+            rows.sort(function (a, b) {
+              var va, vb;
+              if (col === 'worker') { va = cellWorker(a); vb = cellWorker(b); }
+              else if (col === 'status') { va = cellStatus(a); vb = cellStatus(b); }
+              else if (col === 'start') { va = cellDate(a, 'task_start_date'); vb = cellDate(b, 'task_start_date'); }
+              else { va = cellDate(a, 'task_end_date'); vb = cellDate(b, 'task_end_date'); }
+              if (va < vb) return asc ? -1 : 1;
+              if (va > vb) return asc ? 1 : -1;
+              return 0;
+            });
+            rows.forEach(function (r) { tbody.appendChild(r); });
+          }
+
+          document.getElementById('btn-add-task').addEventListener('click', addTaskRow);
+          document.getElementById('btn-del-task').addEventListener('click', deleteSelectedTask);
+          document.querySelectorAll('#task-table-full .btn-sort').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+              sortRows(btn.getAttribute('data-sort-col'));
+            });
+          });
+          if (form) {
+            form.addEventListener('submit', function () {
+              reindexTaskRows();
+            });
+          }
+          reindexTaskRows();
+        })();
+        </script>
+      {% endif %}
+    </div>
+  </div>
+{% endblock %}
+

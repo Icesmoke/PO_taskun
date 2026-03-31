@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <div class="card" style="max-width: 820px;">
+    <h2>Профиль пользователя</h2>
+    <div style="display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap;">
+      <div style="width: 180px;">
+        <div style="border: 1px dashed #ccc; border-radius: 8px; padding: 12px; background: #fafafa;">
+          <div class="muted">Фото недоступно в пилоте</div>
+          <div style="margin-top: 10px; font-size: 50px; line-height: 1;">?</div>
+        </div>
+      </div>
+      <div style="flex: 1;">
+        <div class="field">
+          <div class="muted">ФИО</div>
+          <div><strong>{{ user.full_name }}</strong></div>
+        </div>
+        <div class="field">
+          <div class="muted">Роль</div>
+          <div><strong>{{ user.worker_role }}</strong></div>
+        </div>
+        <div class="field">
+          <div class="muted">АРМ</div>
+          <div><strong>{{ arm }}</strong></div>
+        </div>
+        <div class="actions">
+          <form method="post" action="{{ url_for('logout') }}">
+            <button type="submit">Выйти из аккаунта</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+{% endblock %}
+

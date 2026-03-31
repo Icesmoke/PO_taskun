@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <div class="card" style="max-width: 520px;">
+    <h2>Авторизация</h2>
+    <form method="post" action="{{ url_for('login_post') }}">
+      <div class="field">
+        <label for="short_name">Пользователь (логин)</label>
+        <select id="short_name" name="short_name" required>
+          <option value="" disabled selected>Выберите пользователя</option>
+          {% for w in workers %}
+            <option value="{{ w.short_name }}">{{ w.short_name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label for="password">Пароль</label>
+        <input id="password" type="password" name="password" autocomplete="current-password" required />
+      </div>
+      <div class="actions">
+        <button type="submit">Войти</button>
+      </div>
+    </form>
+  </div>
+{% endblock %}
+

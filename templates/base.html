@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{ title or "Po_Taskun" }}</title>
+    <style>
+      body { font-family: Arial, sans-serif; margin: 20px; }
+      .topbar { display: flex; gap: 12px; align-items: center; margin-bottom: 16px; }
+      .topbar a { text-decoration: none; padding: 6px 10px; border: 1px solid #ddd; border-radius: 6px; }
+      .topbar form { margin: 0; }
+      .btn-link {
+        text-decoration: none; padding: 6px 10px; border: 1px solid #ddd; border-radius: 6px;
+        background: #fff; cursor: pointer; font-size: 14px;
+      }
+      .container { max-width: 1200px; }
+      .grid { display: grid; grid-template-columns: 420px 1fr; gap: 16px; }
+      .card { border: 1px solid #ddd; border-radius: 8px; padding: 14px; background: #fff; }
+      table { width: 100%; border-collapse: collapse; }
+      th, td { border: 1px solid #e2e2e2; padding: 8px; font-size: 14px; }
+      th { background: #f6f6f6; text-align: left; }
+      .actions { display: flex; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
+      .field { margin-bottom: 10px; }
+      input[type="text"], textarea, select { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; }
+      textarea { min-height: 42px; resize: vertical; }
+      details { border: 1px solid #e2e2e2; border-radius: 8px; padding: 10px; background: #fafafa; margin-bottom: 12px; }
+      summary { cursor: pointer; font-weight: 600; }
+      .flash { padding: 10px 12px; border-radius: 8px; margin-bottom: 12px; }
+      .flash.error { background: #ffecec; border: 1px solid #ffb5b5; }
+      .flash.success { background: #edfff0; border: 1px solid #a8f1b0; }
+      .muted { color: #666; }
+    </style>
+  </head>
+  <body>
+    <div class="topbar">
+      <div><strong>Po_Taskun</strong></div>
+      {% if current_user %}
+        <div class="muted">Роль: {{ current_user.worker_role }}</div>
+        {% if current_user.worker_role == 'Администратор' %}
+          <a href="{{ url_for('rights_user_panel') }}">Пользователи</a>
+        {% else %}
+          <a href="{{ url_for('projects') }}">Проекты</a>
+          {% if current_user.worker_role in ['Директор','Руководитель проекта'] %}
+            <a href="{{ url_for('reports') }}">Отчеты</a>
+          {% endif %}
+          {% if current_user.worker_role == 'Директор' %}
+            <a href="{{ url_for('data_input') }}">Ввод данных</a>
+          {% endif %}
+        {% endif %}
+        <a href="{{ url_for('profile') }}">Профиль</a>
+        <form method="post" action="{{ url_for('logout') }}">
+          <button class="btn-link" type="submit">Выйти из аккаунта</button>
+        </form>
+      {% endif %}
+    </div>
+
+    <div class="container">
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          {% for category, message in messages %}
+            <div class="flash {{ category }}">{{ message }}</div>
+          {% endfor %}
+        {% endif %}
+      {% endwith %}
+
+      {% block content %}{% endblock %}
+    </div>
+  </body>
+</html>
+

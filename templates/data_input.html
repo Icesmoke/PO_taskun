@@ -1,0 +1,342 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <style>
+    .tabbar { display: flex; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+    .tab { padding: 8px 12px; border: 1px solid #ddd; border-radius: 8px; background: #fff; cursor: pointer; text-decoration: none; color: #000; font-weight: 600; }
+    .tab.active { background: #f6f6f6; }
+    .table-wrap { overflow-x: auto; }
+    dialog { border: 1px solid #ddd; border-radius: 10px; padding: 14px; }
+  </style>
+
+  <div class="card" style="margin-bottom: 14px;">
+    <h2 style="margin-top: 0;">Ввод данных</h2>
+    <div class="muted">Три вкладки: Премии, Командировки, Подрядчики.</div>
+  </div>
+
+  <div class="tabbar">
+    <a class="tab {% if tab == 'bonuses' %}active{% endif %}" href="{{ url_for('data_input', tab='bonuses') }}">Премии</a>
+    <a class="tab {% if tab == 'voyages' %}active{% endif %}" href="{{ url_for('data_input', tab='voyages') }}">Командировки</a>
+    <a class="tab {% if tab == 'contracters' %}active{% endif %}" href="{{ url_for('data_input', tab='contracters') }}">Подрядчики</a>
+  </div>
+
+  {% if tab == 'bonuses' %}
+    <div class="card" style="margin-bottom: 14px;">
+      <h3 style="margin-top: 0;">Таблица премий</h3>
+      <form method="get" action="{{ url_for('data_input') }}">
+        <input type="hidden" name="tab" value="bonuses" />
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <div>
+            <div class="muted" style="margin-bottom: 6px;">Договор</div>
+            <select multiple name="contract_number" size="6">
+              {% for c in filter_contracts_bonus %}
+                <option value="{{ c }}" {% if c in f_contract %}selected{% endif %}>{{ c }}</option>
+              {% endfor %}
+            </select>
+            <div class="muted" style="font-size: 12px;">Множественный выбор</div>
+          </div>
+          <div>
+            <div class="muted" style="margin-bottom: 6px;">Сотрудник</div>
+            <select multiple name="worker_name" size="6">
+              {% for w in filter_workers_bonus %}
+                <option value="{{ w }}" {% if w in f_worker %}selected{% endif %}>{{ w }}</option>
+              {% endfor %}
+            </select>
+            <div class="muted" style="font-size: 12px;">Множественный выбор</div>
+          </div>
+        </div>
+        <div class="actions">
+          <button type="submit">Применить фильтры</button>
+          <a href="{{ url_for('data_input', tab='bonuses') }}">Сбросить</a>
+        </div>
+      </form>
+    </div>
+
+    <div class="card">
+      <div style="display:flex; align-items:center; justify-content:space-between; gap: 12px; flex-wrap: wrap;">
+        <h3 style="margin-top: 0;">Записи</h3>
+        <div class="actions" style="margin:0;">
+          <button type="button" onclick="window.__openDlg('dlgBonus')">Создать</button>
+        </div>
+      </div>
+
+      <form method="post" action="{{ url_for('data_input_bonuses_delete') }}">
+        <div class="actions" style="margin: 0 0 10px 0;">
+          <button type="submit">Удалить</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 48px;">Выбор</th>
+                <th>Договор</th>
+                <th>Этап</th>
+                <th>Сотрудник</th>
+                <th>Дата</th>
+                <th>Количество часов</th>
+                <th>Сумма премии</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for r in bonuses_rows %}
+                <tr>
+                  <td><input type="radio" name="rid" value="{{ r.rid }}" /></td>
+                  <td>{{ r.contract_number }}</td>
+                  <td>{{ r.etap_number }}</td>
+                  <td>{{ r.worker_name }}</td>
+                  <td>{{ r.task_date|format_date }}</td>
+                  <td>{{ r.hours_number }}</td>
+                  <td>{{ r.bonus_sum }}</td>
+                </tr>
+              {% else %}
+                <tr><td colspan="7" class="muted">Нет данных.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </form>
+    </div>
+
+    <dialog id="dlgBonus" style="max-width: 900px; width: 95%;">
+      <form method="post" action="{{ url_for('data_input_bonuses_create') }}">
+        <div style="display:flex; align-items:center; justify-content:space-between; gap: 12px;">
+          <h3 style="margin: 0;">Создание записи (Премии)</h3>
+          <button type="button" class="btn-link" onclick="window.__closeDlg('dlgBonus')">Закрыть</button>
+        </div>
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px;">
+          <div class="field"><label>Договор *</label><input type="text" name="contract_number" required /></div>
+          <div class="field"><label>Этап *</label><input type="text" name="etap_number" required /></div>
+          <div class="field"><label>Сотрудник *</label><input type="text" name="worker_name" required /></div>
+          <div class="field"><label>Дата *</label><input type="text" name="task_date" placeholder="dd.mm.YYYY" required /></div>
+          <div class="field"><label>Количество часов</label><input type="text" name="hours_number" /></div>
+          <div class="field"><label>Сумма премии</label><input type="text" name="bonus_sum" /></div>
+        </div>
+        <div class="actions" style="justify-content: flex-end;">
+          <button type="submit">Сохранить</button>
+        </div>
+      </form>
+    </dialog>
+
+  {% elif tab == 'voyages' %}
+    <div class="card" style="margin-bottom: 14px;">
+      <h3 style="margin-top: 0;">Таблица командировок</h3>
+      <form method="get" action="{{ url_for('data_input') }}">
+        <input type="hidden" name="tab" value="voyages" />
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <div>
+            <div class="muted" style="margin-bottom: 6px;">Договор</div>
+            <select multiple name="contract_number" size="6">
+              {% for c in filter_contracts_voy %}
+                <option value="{{ c }}" {% if c in f_contract %}selected{% endif %}>{{ c }}</option>
+              {% endfor %}
+            </select>
+            <div class="muted" style="font-size: 12px;">Множественный выбор</div>
+          </div>
+          <div>
+            <div class="muted" style="margin-bottom: 6px;">Сотрудник</div>
+            <select multiple name="worker_name" size="6">
+              {% for w in filter_workers_voy %}
+                <option value="{{ w }}" {% if w in f_worker %}selected{% endif %}>{{ w }}</option>
+              {% endfor %}
+            </select>
+            <div class="muted" style="font-size: 12px;">Множественный выбор</div>
+          </div>
+        </div>
+        <div class="actions">
+          <button type="submit">Применить фильтры</button>
+          <a href="{{ url_for('data_input', tab='voyages') }}">Сбросить</a>
+        </div>
+      </form>
+    </div>
+
+    <div class="card">
+      <div style="display:flex; align-items:center; justify-content:space-between; gap: 12px; flex-wrap: wrap;">
+        <h3 style="margin-top: 0;">Записи</h3>
+        <div class="actions" style="margin:0;">
+          <button type="button" onclick="window.__openDlg('dlgVoyage')">Создать</button>
+        </div>
+      </div>
+
+      <form method="post" action="{{ url_for('data_input_voyages_delete') }}">
+        <div class="actions" style="margin: 0 0 10px 0;">
+          <button type="submit">Удалить</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 48px;">Выбор</th>
+                <th>Договор</th>
+                <th>Этап</th>
+                <th>Сотрудник</th>
+                <th>Дата командировки</th>
+                <th>Вид затрат</th>
+                <th>Сумма затрат</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for r in voyages_rows %}
+                <tr>
+                  <td><input type="radio" name="rid" value="{{ r.rid }}" /></td>
+                  <td>{{ r.contract_number }}</td>
+                  <td>{{ r.etap_number }}</td>
+                  <td>{{ r.worker_name }}</td>
+                  <td>{{ r.voyage_date|format_date }}</td>
+                  <td>{{ r.voyage_cost_kind }}</td>
+                  <td>{{ r.voyage_cost_sum }}</td>
+                </tr>
+              {% else %}
+                <tr><td colspan="7" class="muted">Нет данных.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </form>
+    </div>
+
+    <dialog id="dlgVoyage" style="max-width: 900px; width: 95%;">
+      <form method="post" action="{{ url_for('data_input_voyages_create') }}">
+        <div style="display:flex; align-items:center; justify-content:space-between; gap: 12px;">
+          <h3 style="margin: 0;">Создание записи (Командировки)</h3>
+          <button type="button" class="btn-link" onclick="window.__closeDlg('dlgVoyage')">Закрыть</button>
+        </div>
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px;">
+          <div class="field"><label>Договор *</label><input type="text" name="contract_number" required /></div>
+          <div class="field"><label>Этап *</label><input type="text" name="etap_number" required /></div>
+          <div class="field"><label>Сотрудник *</label><input type="text" name="worker_name" required /></div>
+          <div class="field"><label>Дата командировки *</label><input type="text" name="voyage_date" placeholder="dd.mm.YYYY" required /></div>
+          <div class="field">
+            <label>Вид затрат</label>
+            <select name="voyage_cost_kind">
+              <option value="">—</option>
+              {% for k in voyage_kinds %}
+                <option value="{{ k }}">{{ k }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="field"><label>Сумма затрат</label><input type="text" name="voyage_cost_sum" /></div>
+        </div>
+        <div class="actions" style="justify-content: flex-end;">
+          <button type="submit">Сохранить</button>
+        </div>
+      </form>
+    </dialog>
+
+  {% else %}
+    <div class="card" style="margin-bottom: 14px;">
+      <h3 style="margin-top: 0;">Таблица подрядчиков</h3>
+      <form method="get" action="{{ url_for('data_input') }}">
+        <input type="hidden" name="tab" value="contracters" />
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <div>
+            <div class="muted" style="margin-bottom: 6px;">Договор</div>
+            <select multiple name="contract_number" size="6">
+              {% for c in filter_contracts_ctr %}
+                <option value="{{ c }}" {% if c in f_contract %}selected{% endif %}>{{ c }}</option>
+              {% endfor %}
+            </select>
+            <div class="muted" style="font-size: 12px;">Множественный выбор</div>
+          </div>
+          <div>
+            <div class="muted" style="margin-bottom: 6px;">Подрядчик</div>
+            <select multiple name="contracter_name" size="6">
+              {% for n in filter_contracters %}
+                <option value="{{ n }}" {% if n in f_contracter %}selected{% endif %}>{{ n }}</option>
+              {% endfor %}
+            </select>
+            <div class="muted" style="font-size: 12px;">Множественный выбор</div>
+          </div>
+        </div>
+        <div class="actions">
+          <button type="submit">Применить фильтры</button>
+          <a href="{{ url_for('data_input', tab='contracters') }}">Сбросить</a>
+        </div>
+      </form>
+    </div>
+
+    <div class="card">
+      <div style="display:flex; align-items:center; justify-content:space-between; gap: 12px; flex-wrap: wrap;">
+        <h3 style="margin-top: 0;">Записи</h3>
+        <div class="actions" style="margin:0;">
+          <button type="button" onclick="window.__openDlg('dlgContracter')">Создать</button>
+        </div>
+      </div>
+
+      <form method="post" action="{{ url_for('data_input_contracters_delete') }}">
+        <div class="actions" style="margin: 0 0 10px 0;">
+          <button type="submit">Удалить</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 48px;">Выбор</th>
+                <th>Договор</th>
+                <th>Этап</th>
+                <th>Подрядчик</th>
+                <th>Дата начала работы</th>
+                <th>Дата окончания работы</th>
+                <th>Количество часов</th>
+                <th>Сумма затрат</th>
+                <th>Комментарий</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for r in contracters_rows %}
+                <tr>
+                  <td><input type="radio" name="rid" value="{{ r.rid }}" /></td>
+                  <td>{{ r.contract_number }}</td>
+                  <td>{{ r.etap_number }}</td>
+                  <td>{{ r.contracter_name }}</td>
+                  <td>{{ r.task_start_date|format_date }}</td>
+                  <td>{{ r.task_end_date|format_date }}</td>
+                  <td>{{ r.contracters_hours_number }}</td>
+                  <td>{{ r.contracters_cost_sum }}</td>
+                  <td>{{ r.comment }}</td>
+                </tr>
+              {% else %}
+                <tr><td colspan="9" class="muted">Нет данных.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </form>
+    </div>
+
+    <dialog id="dlgContracter" style="max-width: 900px; width: 95%;">
+      <form method="post" action="{{ url_for('data_input_contracters_create') }}">
+        <div style="display:flex; align-items:center; justify-content:space-between; gap: 12px;">
+          <h3 style="margin: 0;">Создание записи (Подрядчики)</h3>
+          <button type="button" class="btn-link" onclick="window.__closeDlg('dlgContracter')">Закрыть</button>
+        </div>
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px;">
+          <div class="field"><label>Договор *</label><input type="text" name="contract_number" required /></div>
+          <div class="field"><label>Этап *</label><input type="text" name="etap_number" required /></div>
+          <div class="field"><label>Подрядчик *</label><input type="text" name="contracter_name" required /></div>
+          <div class="field"><label>Количество часов</label><input type="text" name="contracters_hours_number" /></div>
+          <div class="field"><label>Дата начала работы</label><input type="text" name="task_start_date" placeholder="dd.mm.YYYY" /></div>
+          <div class="field"><label>Дата окончания работы</label><input type="text" name="task_end_date" placeholder="dd.mm.YYYY" /></div>
+          <div class="field"><label>Сумма затрат</label><input type="text" name="contracters_cost_sum" /></div>
+          <div class="field"><label>Комментарий</label><input type="text" name="comment" /></div>
+        </div>
+        <div class="actions" style="justify-content: flex-end;">
+          <button type="submit">Сохранить</button>
+        </div>
+      </form>
+    </dialog>
+  {% endif %}
+
+  <script>
+    (function () {
+      window.__openDlg = function (id) {
+        var dlg = document.getElementById(id);
+        if (dlg && dlg.showModal) dlg.showModal();
+      };
+      window.__closeDlg = function (id) {
+        var dlg = document.getElementById(id);
+        if (dlg && dlg.close) dlg.close();
+      };
+    })();
+  </script>
+{% endblock %}
+

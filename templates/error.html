@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <div class="card" style="max-width: 720px;">
+    <h2>Ошибка</h2>
+    <div>{{ message }}</div>
+    <div class="actions" style="margin-top: 12px;">
+      <a href="{{ url_for('projects') }}">На главную</a>
+    </div>
+  </div>
+{% endblock %}
+
