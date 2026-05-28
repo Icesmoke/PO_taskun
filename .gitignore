@@ -1,10 +1,26 @@
 venv/
+.venv/
 __pycache__/
 *.pyc
-flask_session/
 
-# Local database (contains data and passwords)
+# Sessions (server-side Flask-Session)
+flask_session/
+flask_session*/
+flask_session_data/
+
+# Local database (contains data and passwords) — deploy separately on each server
 taskun.sqlite
+taskun.sqlite-*
+*.sqlite-journal
+
+# Docker image export (build locally: docker save po-taskun:latest -o po-taskun-latest.tar)
+po-taskun-latest.tar
+*.tar
+
+# Secrets
+.env
+.env.*
+!.env.example
 
 # Archived Django + React — local artifacts only
 _archive/**/db.sqlite3

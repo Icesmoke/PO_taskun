@@ -1,68 +1,50 @@
 {% extends "base.html" %}
 
 {% block content %}
-  <style>
-    .modal {
-      display: none;
-      position: fixed;
-      z-index: 1000;
-      left: 0;
-      top: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(0, 0, 0, 0.3);
-    }
-    .modal-content {
-      background: #fff;
-      margin: 10% auto;
-      padding: 16px;
-      border-radius: 8px;
-      width: 500px;
-      max-width: 95%;
-    }
-  </style>
+  <div class="box">
+    <h2 class="page-title">Панель управления пользователями</h2>
+    <div class="muted block-mb">{{ arm }}</div>
 
-  <div class="card">
-    <h2 style="margin-top: 0;">Панель управления пользователями</h2>
-    <div class="muted" style="margin-bottom: 10px;">{{ arm }}</div>
-
-    <div class="actions" style="margin-bottom: 10px;">
-      <button type="button" onclick="openCreateModal()">Создать пользователя</button>
+    <div class="actions actions--mb">
+      <button type="button" class="button is-primary" onclick="openCreateModal()">Создать пользователя</button>
       <form method="post" action="{{ url_for('disable_user') }}" id="disableForm">
         <input type="hidden" id="selectedWorkerId" name="workers_id" value="" />
-        <button type="submit">Удалить пользователя</button>
+        <button type="submit" class="button is-danger is-light">Удалить пользователя</button>
       </form>
     </div>
 
-    <table>
-      <thead>
-        <tr>
-          <th></th>
-          <th>Пользователь</th>
-          <th>Роль пользователя</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for u in users %}
+    <p class="table-scroll-hint table-scroll-hint--mobile-only">Таблицу можно прокручивать по горизонтали.</p>
+    <div class="table-wrap table-wrap--sticky">
+      <table class="table is-striped is-hoverable is-fullwidth">
+        <thead>
           <tr>
-            <td style="width: 40px;">
-              <input type="radio" name="user_select" value="{{ u.workers_id }}" onchange="selectWorker(this.value)" />
-            </td>
-            <td>{{ u.short_name }}</td>
-            <td>{{ u.worker_role }}</td>
+            <th class="col-radio"></th>
+            <th>Пользователь</th>
+            <th>Роль пользователя</th>
           </tr>
-        {% else %}
-          <tr>
-            <td colspan="3" class="muted">Нет активных пользователей.</td>
-          </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {% for u in users %}
+            <tr>
+              <td class="col-radio">
+                <input type="radio" name="user_select" value="{{ u.workers_id }}" onchange="selectWorker(this.value)" />
+              </td>
+              <td>{{ u.short_name }}</td>
+              <td>{{ u.worker_role }}</td>
+            </tr>
+          {% else %}
+            <tr>
+              <td colspan="3" class="muted">Нет активных пользователей.</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
   </div>
 
   <div id="createUserModal" class="modal">
-    <div class="modal-content">
-      <h3 style="margin-top: 0;">Создание нового пользователя</h3>
+    <div class="modal-content box">
+      <h3 class="section-title">Создание нового пользователя</h3>
       <form method="post" action="{{ url_for('create_user') }}">
         <div class="field">
           <label>Полное имя пользователя</label>
@@ -81,9 +63,9 @@
             {% endfor %}
           </select>
         </div>
-        <div class="actions">
-          <button type="submit">Сохранить</button>
-          <button type="button" onclick="closeCreateModal()">Отмена</button>
+        <div class="actions actions--zero">
+          <button type="submit" class="button is-primary">Сохранить</button>
+          <button type="button" class="button is-light" onclick="closeCreateModal()">Отмена</button>
         </div>
       </form>
     </div>
@@ -107,4 +89,3 @@
     }
   </script>
 {% endblock %}
-

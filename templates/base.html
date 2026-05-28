@@ -2,69 +2,223 @@
 <html lang="ru">
   <head>
     <meta charset="utf-8" />
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem("taskun-theme");
+          if (t === "dark" || t === "light") {
+            document.documentElement.setAttribute("data-theme", t);
+          } else {
+            document.documentElement.setAttribute("data-theme", "light");
+          }
+        } catch (e) {
+          document.documentElement.setAttribute("data-theme", "light");
+        }
+      })();
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta id="meta-color-scheme" name="color-scheme" content="light" />
+    <meta id="meta-theme-color" name="theme-color" content="#fafbfc" />
     <title>{{ title or "Po_Taskun" }}</title>
-    <style>
-      body { font-family: Arial, sans-serif; margin: 20px; }
-      .topbar { display: flex; gap: 12px; align-items: center; margin-bottom: 16px; }
-      .topbar a { text-decoration: none; padding: 6px 10px; border: 1px solid #ddd; border-radius: 6px; }
-      .topbar form { margin: 0; }
-      .btn-link {
-        text-decoration: none; padding: 6px 10px; border: 1px solid #ddd; border-radius: 6px;
-        background: #fff; cursor: pointer; font-size: 14px;
-      }
-      .container { max-width: 1200px; }
-      .grid { display: grid; grid-template-columns: 420px 1fr; gap: 16px; }
-      .card { border: 1px solid #ddd; border-radius: 8px; padding: 14px; background: #fff; }
-      table { width: 100%; border-collapse: collapse; }
-      th, td { border: 1px solid #e2e2e2; padding: 8px; font-size: 14px; }
-      th { background: #f6f6f6; text-align: left; }
-      .actions { display: flex; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
-      .field { margin-bottom: 10px; }
-      input[type="text"], textarea, select { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; }
-      textarea { min-height: 42px; resize: vertical; }
-      details { border: 1px solid #e2e2e2; border-radius: 8px; padding: 10px; background: #fafafa; margin-bottom: 12px; }
-      summary { cursor: pointer; font-weight: 600; }
-      .flash { padding: 10px 12px; border-radius: 8px; margin-bottom: 12px; }
-      .flash.error { background: #ffecec; border: 1px solid #ffb5b5; }
-      .flash.success { background: #edfff0; border: 1px solid #a8f1b0; }
-      .muted { color: #666; }
-    </style>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/bulma@1.0.4/css/bulma.min.css"
+    />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}" />
+    {% if current_user %}
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.default.min.css"
+    />
+    {% endif %}
   </head>
   <body>
-    <div class="topbar">
-      <div><strong>Po_Taskun</strong></div>
-      {% if current_user %}
-        <div class="muted">Роль: {{ current_user.worker_role }}</div>
-        {% if current_user.worker_role == 'Администратор' %}
-          <a href="{{ url_for('rights_user_panel') }}">Пользователи</a>
-        {% else %}
-          <a href="{{ url_for('projects') }}">Проекты</a>
-          {% if current_user.worker_role in ['Директор','Руководитель проекта'] %}
-            <a href="{{ url_for('reports') }}">Отчеты</a>
-          {% endif %}
-          {% if current_user.worker_role == 'Директор' %}
-            <a href="{{ url_for('data_input') }}">Ввод данных</a>
-          {% endif %}
-        {% endif %}
-        <a href="{{ url_for('profile') }}">Профиль</a>
-        <form method="post" action="{{ url_for('logout') }}">
-          <button class="btn-link" type="submit">Выйти из аккаунта</button>
-        </form>
-      {% endif %}
-    </div>
+    {% set ep = request.endpoint or '' %}
+    {% set nav_projects = ep in ['projects', 'project_card', 'create_project_post', 'update_project', 'save_tasks', 'upload_tasks'] %}
+    {% set nav_reports = ep == 'reports' %}
+    {% set nav_data = ep.startswith('data_input') %}
+    {% set nav_users = ep == 'rights_user_panel' %}
+    {% set nav_profile = ep == 'profile' %}
 
-    <div class="container">
-      {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-          {% for category, message in messages %}
-            <div class="flash {{ category }}">{{ message }}</div>
-          {% endfor %}
-        {% endif %}
-      {% endwith %}
+    {% if current_user %}
+      <div class="app-shell">
+        <aside class="menu sidebar p-4" id="appSidebar" aria-label="Основное меню">
+          <p class="menu-label">Po_Taskun</p>
+          <div class="sidebar__meta mb-4">
+            <span class="sidebar__label">Пользователь</span>
+            {{ current_user.short_name or '—' }}
+            <span class="sidebar__label sidebar__label--gap">Роль</span>
+            {{ current_user.worker_role }}
+          </div>
+          <p class="menu-label">Разделы</p>
+          <ul class="menu-list">
+            {% if current_user.worker_role == 'Администратор' %}
+              <li>
+                <a
+                  class="{% if nav_users %}is-active{% endif %}"
+                  href="{{ url_for('rights_user_panel') }}"
+                  >Пользователи</a
+                >
+              </li>
+            {% else %}
+              <li>
+                <a class="{% if nav_projects %}is-active{% endif %}" href="{{ url_for('projects') }}">Проекты</a>
+              </li>
+              {% if current_user.worker_role in ['Директор', 'Руководитель проекта'] %}
+                <li>
+                  <a class="{% if nav_reports %}is-active{% endif %}" href="{{ url_for('reports') }}">Отчёты</a>
+                </li>
+              {% endif %}
+              {% if current_user.worker_role == 'Директор' %}
+                <li>
+                  <a class="{% if nav_data %}is-active{% endif %}" href="{{ url_for('data_input') }}">Ввод данных</a>
+                </li>
+              {% endif %}
+            {% endif %}
+            <li>
+              <a class="{% if nav_profile %}is-active{% endif %}" href="{{ url_for('profile') }}">Профиль</a>
+            </li>
+          </ul>
+          <div class="sidebar__footer mt-4">
+            <div class="sidebar__theme">
+              <button
+                type="button"
+                class="button is-light is-fullwidth theme-toggle"
+                id="themeToggleAuth"
+                aria-pressed="false"
+                aria-label="Включить тёмную тему"
+              >
+                <span class="theme-toggle__when-light">🌙 Тёмная тема</span>
+                <span class="theme-toggle__when-dark">☀️ Светлая тема</span>
+              </button>
+            </div>
+            <form method="post" action="{{ url_for('logout') }}">
+              <button class="button is-light is-fullwidth" type="submit">Выйти из аккаунта</button>
+            </form>
+          </div>
+        </aside>
 
-      {% block content %}{% endblock %}
-    </div>
+        <div class="shell-main">
+          <div class="shell-backdrop" id="shellBackdrop" aria-hidden="true"></div>
+          <header class="shell-topbar">
+            <button
+              type="button"
+              class="button is-light sidebar-toggle"
+              id="sidebarToggle"
+              aria-label="Открыть или закрыть меню"
+              aria-expanded="false"
+              aria-controls="appSidebar"
+            >
+              ☰
+            </button>
+            <strong class="shell-topbar__title">Po_Taskun</strong>
+          </header>
+          <main class="shell-content container">
+    {% else %}
+      <div class="guest-layout">
+        <div class="guest-layout__theme-bar">
+          <button
+            type="button"
+            class="button is-light theme-toggle"
+            id="themeToggleGuest"
+            aria-pressed="false"
+            aria-label="Включить тёмную тему"
+          >
+            <span class="theme-toggle__when-light">🌙 Тёмная</span>
+            <span class="theme-toggle__when-dark">☀️ Светлая</span>
+          </button>
+        </div>
+        <div class="container">
+    {% endif %}
+            {% with messages = get_flashed_messages(with_categories=true) %}
+              {% if messages %}
+                {% for category, message in messages %}
+                  {% set is_err = category == 'error' %}
+                  {% set is_ok = category == 'success' %}
+                  <div
+                    class="notification {% if is_err %}is-danger is-light{% elif is_ok %}is-success is-light{% else %}is-info is-light{% endif %} po-flash po-flash--{{ category }}"
+                    role="{% if is_err %}alert{% else %}status{% endif %}"
+                    aria-live="{% if is_err %}assertive{% else %}polite{% endif %}"
+                    {% if not is_err %}data-auto-dismiss="1"{% endif %}
+                  >
+                    <span class="po-flash__icon-wrap" aria-hidden="true">
+                      {% if is_err %}
+                        <svg class="po-flash__svg" width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
+                      {% elif is_ok %}
+                        <svg class="po-flash__svg" width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/></svg>
+                      {% else %}
+                        <svg class="po-flash__svg" width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
+                      {% endif %}
+                    </span>
+                    <p class="po-flash__body">{{ message }}</p>
+                    <button type="button" class="delete po-flash-dismiss" aria-label="Закрыть уведомление"></button>
+                  </div>
+                {% endfor %}
+              {% endif %}
+            {% endwith %}
+            {% block content %}{% endblock %}
+    {% if current_user %}
+          </main>
+        </div>
+      </div>
+
+      <script>
+        (function () {
+          var body = document.body;
+          var toggle = document.getElementById("sidebarToggle");
+          var backdrop = document.getElementById("shellBackdrop");
+          function setOpen(open) {
+            body.classList.toggle("sidebar-open", open);
+            if (toggle) toggle.setAttribute("aria-expanded", open ? "true" : "false");
+          }
+          function close() {
+            setOpen(false);
+          }
+          if (toggle) {
+            toggle.addEventListener("click", function () {
+              setOpen(!body.classList.contains("sidebar-open"));
+            });
+          }
+          if (backdrop) {
+            backdrop.addEventListener("click", close);
+          }
+          document.querySelectorAll(".sidebar .menu-list a").forEach(function (a) {
+            a.addEventListener("click", close);
+          });
+          document.addEventListener("keydown", function (e) {
+            if (e.key === "Escape") close();
+          });
+        })();
+      </script>
+      <script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
+      <script src="{{ url_for('static', filename='js/filter-multiselect.js') }}"></script>
+    {% else %}
+        </div>
+      </div>
+    {% endif %}
+    <script src="{{ url_for('static', filename='js/theme.js') }}"></script>
+    <script>
+      document.querySelectorAll(".po-flash-dismiss").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          var n = btn.closest(".notification");
+          if (n) n.remove();
+        });
+      });
+      document.querySelectorAll(".po-flash[data-auto-dismiss='1']").forEach(function (el) {
+        window.setTimeout(function () {
+          if (!el.parentNode) return;
+          el.classList.add("po-flash--leaving");
+          window.setTimeout(function () {
+            if (el.parentNode) el.parentNode.removeChild(el);
+          }, 280);
+        }, 8000);
+      });
+    </script>
   </body>
 </html>
-

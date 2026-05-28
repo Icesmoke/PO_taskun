@@ -1,8 +1,8 @@
 {% extends "base.html" %}
 
 {% block content %}
-  <div class="card" style="max-width: 520px;">
-    <h2>Авторизация</h2>
+  <div class="box po-narrow">
+    <h2 class="page-title">Авторизация</h2>
     <form method="post" action="{{ url_for('login_post') }}">
       <div class="field">
         <label for="short_name">Пользователь (логин)</label>
@@ -17,10 +17,9 @@
         <label for="password">Пароль</label>
         <input id="password" type="password" name="password" autocomplete="current-password" required />
       </div>
-      <div class="actions">
-        <button type="submit">Войти</button>
+      <div class="actions actions--zero">
+        <button type="submit" class="button is-primary">Войти</button>
       </div>
     </form>
   </div>
 {% endblock %}
-

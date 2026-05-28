@@ -1,38 +1,44 @@
 {% extends "base.html" %}
 
 {% block content %}
-  <style>
-    .task-table-wrap { overflow-x: auto; }
-    .task-table { table-layout: fixed; min-width: 1800px; }
-    .task-table th, .task-table td { min-width: 220px; }
-  </style>
-  <div class="grid">
-    <div class="card">
-      <h2 style="margin-top: 0;">Информация о проекте</h2>
+  <div class="project-card-layout">
+    <div class="box">
+      <h2 class="page-title">Информация о проекте</h2>
 
-      <div class="field"><strong>Номер договора:</strong> {{ project.contract_number }}</div>
-      <div class="field"><strong>Вид договора:</strong> {{ project.contract_kind }}</div>
-      <div class="field"><strong>Заказчик:</strong> {{ project.client_name }}</div>
-      <div class="field"><strong>Исполнитель:</strong> {{ project.executant_name }}</div>
-      <div class="field"><strong>Дата начала проекта:</strong> {{ project.plan_start_date|format_date }}</div>
-      <div class="field"><strong>Дата окончания проекта:</strong> {{ project.plan_end_date|format_date }}</div>
-      <div class="field"><strong>Статус проекта:</strong> {{ project.project_status }}</div>
-      <div class="field"><strong>Номер этапа:</strong> {{ etap_number or '—' }}</div>
-      <div class="field"><strong>Период проверки:</strong> {{ project.period }}</div>
-      <div class="field"><strong>Руководитель проекта:</strong> {{ project.project_chief }}</div>
-      <div class="field"><strong>Сумма по этапу:</strong> {{ project.etap_sum }}</div>
+      <div class="project-info-grid">
+        <div class="project-info-col">
+          <div class="field">
+            <strong>Номер договора:</strong> {{ project.contract_number }}
+          </div>
+          <div class="field">
+            <strong>Вид договора:</strong> {{ project.contract_kind }}
+          </div>
+        </div>
+
+        <div class="project-info-col">
+          <div class="field"><strong>Заказчик:</strong> {{ project.client_name }}</div>
+          <div class="field"><strong>Исполнитель:</strong> {{ project.executant_name }}</div>
+          <div class="field"><strong>Дата начала проекта:</strong> {{ project.plan_start_date|format_date }}</div>
+          <div class="field"><strong>Дата окончания проекта:</strong> {{ project.plan_end_date|format_date }}</div>
+          <div class="field"><strong>Статус проекта:</strong> {{ project.project_status }}</div>
+          <div class="field"><strong>Номер этапа:</strong> {{ etap_number or '—' }}</div>
+          <div class="field"><strong>Период проверки:</strong> {{ project.period }}</div>
+          <div class="field"><strong>Руководитель проекта:</strong> {{ project.project_chief }}</div>
+          <div class="field"><strong>Сумма по этапу:</strong> {{ project.etap_sum }}</div>
+        </div>
+      </div>
     </div>
 
-    <div class="card">
-      <h2 style="margin-top: 0;">Проектное задание</h2>
+    <div class="box">
+      <h2 class="page-title">Проектное задание</h2>
 
-      <div class="muted" style="margin-bottom: 12px;">
+      <div class="muted block-mb">
         contract_number: <strong>{{ contract_number }}</strong>
         {% if etap_number %}, etap_number: <strong>{{ etap_number }}</strong>{% endif %}
       </div>
 
       {% if edit_mode == 'view' %}
-        <div class="muted" style="margin-bottom: 12px;">
+        <div class="muted block-mb">
           Режим просмотра (редактирование недоступно).
         </div>
 
@@ -42,8 +48,9 @@
           <details open>
             <summary>Этап {{ etap_number }} ({{ tasks|length }} задач)</summary>
 
-            <div class="task-table-wrap">
-            <table class="task-table">
+            <p class="table-scroll-hint table-scroll-hint--mobile-only">Таблицу можно прокручивать по горизонтали и вертикали.</p>
+            <div class="table-wrap task-table-wrap table-wrap--sticky">
+            <table class="table is-striped is-hoverable is-fullwidth task-table">
               <thead>
                 <tr>
                   <th>Задача</th>
@@ -76,7 +83,7 @@
         {% endif %}
 
       {% elif edit_mode == 'partial' %}
-        <div class="muted" style="margin-bottom: 12px;">
+        <div class="muted block-mb">
           Режим частичного редактирования: доступны поля «Дата начала», «Дата окончания», «Комментарий», «Рабочий файл», «Статус».
         </div>
 
@@ -89,8 +96,9 @@
             <details open>
               <summary>Этап {{ etap_number }} ({{ tasks|length }} задач)</summary>
 
-              <div class="task-table-wrap">
-              <table class="task-table">
+              <p class="table-scroll-hint table-scroll-hint--mobile-only">Таблицу можно прокручивать по горизонтали и вертикали.</p>
+              <div class="table-wrap task-table-wrap table-wrap--sticky">
+              <table class="table is-striped is-hoverable is-fullwidth task-table">
                 <thead>
                   <tr>
                     <th>Задача</th>
@@ -143,40 +151,41 @@
               </div>
             </details>
 
-            <div class="actions" style="margin-top: 12px;">
-              <button type="submit">Сохранить</button>
+            <div class="actions actions--mt-sm">
+              <button type="submit" class="button is-primary">Сохранить</button>
             </div>
           {% endif %}
         </form>
 
       {% else %}
-        <div class="actions" style="margin-bottom: 12px;">
+        <div class="actions actions--mb-lg">
           <form method="post" action="{{ url_for('upload_tasks', contract_number=contract_number, etap_number=etap_number) }}" enctype="multipart/form-data">
             <input type="file" name="file" accept=".xlsx" required />
-            <button type="submit">Загрузить</button>
+            <button type="submit" class="button is-primary">Загрузить</button>
           </form>
         </div>
 
-        <div class="muted" style="margin-bottom: 8px;">
+        <div class="muted block-mb-xs">
           Добавление и удаление строк, сортировка — кнопки ниже и значки ⇅ в заголовках столбцов. Удаление: отметьте строку в колонке «Выбор», затем «Удалить задачу». Пустой список можно заполнить вручную или загрузить XLSX.
         </div>
 
         <form id="task-form-full" method="post" action="{{ url_for('save_tasks', contract_number=contract_number, etap_number=etap_number) }}">
           <input type="hidden" name="tasks_count" id="tasks_count_full" value="{{ tasks|length }}" />
 
-          <div class="actions" style="margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
-            <button type="button" id="btn-add-task">Добавить задачу</button>
-            <button type="button" id="btn-del-task">Удалить задачу</button>
+          <div class="actions actions--toolbar actions--gap-sm">
+            <button type="button" class="button is-light" id="btn-add-task">Добавить задачу</button>
+            <button type="button" class="button is-danger is-light" id="btn-del-task">Удалить задачу</button>
           </div>
 
           <details open>
             <summary>Этап {{ etap_number }} (<span id="task-count-label">{{ tasks|length }}</span> задач)</summary>
 
-            <div class="task-table-wrap">
-            <table class="task-table" id="task-table-full">
+            <p class="table-scroll-hint table-scroll-hint--mobile-only">Таблицу можно прокручивать по горизонтали и вертикали.</p>
+            <div class="table-wrap task-table-wrap table-wrap--sticky">
+            <table class="table is-striped is-hoverable is-fullwidth task-table" id="task-table-full">
               <thead>
                 <tr>
-                  <th style="min-width: 48px;">Выбор</th>
+                  <th class="col-select">Выбор</th>
                   <th>Задача</th>
                   <th>Описание</th>
                   <th>
@@ -244,8 +253,8 @@
             </div>
           </details>
 
-          <div class="actions" style="margin-top: 12px;">
-            <button type="submit">Сохранить</button>
+          <div class="actions actions--mt-sm">
+            <button type="submit" class="button is-primary">Сохранить</button>
           </div>
         </form>
 

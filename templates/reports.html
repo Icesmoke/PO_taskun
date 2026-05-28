@@ -1,79 +1,40 @@
 {% extends "base.html" %}
 
 {% block content %}
-  <style>
-    .tabbar { display: flex; gap: 10px; margin-bottom: 12px; }
-    .tab { padding: 8px 12px; border: 1px solid #ddd; border-radius: 8px; background: #fff; cursor: pointer; text-decoration: none; color: #000; font-weight: 600; }
-    .tab.active { background: #f6f6f6; }
-    .gantt-wrap { overflow-x: auto; overflow-y: visible; max-width: 100%; }
-    .gantt-table { table-layout: fixed; border-collapse: separate; border-spacing: 0; min-width: 1200px; }
-    .gantt-table th, .gantt-table td { border: 1px solid #e2e2e2; padding: 6px; vertical-align: top; }
-    /* Шапка по вертикали; первый столбец — по горизонтали (остаётся при прокрутке дней) */
-    .gantt-table thead th {
-      background: #f6f6f6;
-      position: sticky;
-      top: 0;
-      z-index: 1;
-    }
-    .gantt-table thead th:first-child,
-    .gantt-table tbody td:first-child {
-      position: sticky;
-      left: 0;
-      min-width: 168px;
-      max-width: 220px;
-      box-shadow: 4px 0 6px -2px rgba(0, 0, 0, 0.12);
-    }
-    .gantt-table thead th:first-child {
-      z-index: 5;
-      background: #f6f6f6;
-    }
-    .gantt-table tbody td:first-child {
-      z-index: 2;
-      background: #fff;
-      font-weight: 700;
-    }
-    .pill {
-      display: inline-block;
-      padding: 3px 6px;
-      border-radius: 10px;
-      color: #fff;
-      font-size: 12px;
-      margin: 2px 2px 0 0;
-      white-space: nowrap;
-    }
-    .util-summary { font-weight: 700; }
-    details.util-emp { margin-bottom: 10px; border: 1px solid #e2e2e2; border-radius: 8px; padding: 10px; background: #fff; }
-    details.util-emp summary { font-weight: 700; cursor: pointer; }
-    tr.negative-income td { background: #ffecec; }
-    tr.negative-income td.econ-profit { font-weight: 700; color: #b00020; }
-  </style>
+  <h2 class="page-title">Отчеты</h2>
 
-  <h2 style="margin-top: 0;">Отчеты</h2>
-
-  <div class="tabbar">
-    <a class="tab {% if report_type == 'gant' %}active{% endif %}" href="{{ url_for('reports', report_type='gant', date_start=date_start, date_end=date_end, contract_kind=contract_kind or '', project_chief=project_chief or '') }}">Диаграмма ганта</a>
-    <a class="tab {% if report_type == 'util' %}active{% endif %}" href="{{ url_for('reports', report_type='util', date_start=date_start, date_end=date_end, contract_kind=contract_kind or '', project_chief=project_chief or '') }}">Отчет по утилизации</a>
-    <a class="tab {% if report_type == 'econ' %}active{% endif %}" href="{{ url_for('reports', report_type='econ', date_start=date_start, date_end=date_end, contract_kind=contract_kind or '', project_chief=project_chief or '') }}">Экономика проектов</a>
+  <div class="tabs is-boxed mb-4">
+    <ul>
+      <li class="{% if report_type == 'gant' %}is-active{% endif %}">
+        <a href="{{ url_for('reports', report_type='gant', date_start=date_start, date_end=date_end, contract_kind=contract_kind or '', project_chief=project_chief or '') }}">Диаграмма ганта</a>
+      </li>
+      <li class="{% if report_type == 'util' %}is-active{% endif %}">
+        <a href="{{ url_for('reports', report_type='util', date_start=date_start, date_end=date_end, contract_kind=contract_kind or '', project_chief=project_chief or '') }}">Отчет по утилизации</a>
+      </li>
+      <li class="{% if report_type == 'econ' %}is-active{% endif %}">
+        <a href="{{ url_for('reports', report_type='econ', date_start=date_start, date_end=date_end, contract_kind=contract_kind or '', project_chief=project_chief or '') }}">Экономика проектов</a>
+      </li>
+    </ul>
   </div>
 
-  <div class="card" style="margin-bottom: 14px;">
+  <div class="box po-mb">
     <form method="get" action="{{ url_for('reports') }}">
       <input type="hidden" name="report_type" value="{{ report_type }}" />
 
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+      <div class="grid-2">
         <div>
-          <div class="muted" style="margin-bottom: 6px;">Дата начала</div>
+          <div class="label">Дата начала</div>
           <input type="text" name="date_start" value="{{ date_start }}" placeholder="dd.mm.YYYY" />
         </div>
         <div>
-          <div class="muted" style="margin-bottom: 6px;">Дата окончания</div>
+          <div class="label">Дата окончания</div>
           <input type="text" name="date_end" value="{{ date_end }}" placeholder="dd.mm.YYYY" />
         </div>
       </div>
 
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px;">
+      <div class="grid-2 grid-2--mt">
         <div>
-          <div class="muted" style="margin-bottom: 6px;">Вид договора</div>
+          <div class="label">Вид договора</div>
           <select name="contract_kind">
             <option value="" {% if not contract_kind %}selected{% endif %}>(все)</option>
             {% for k in contract_kinds %}
@@ -82,7 +43,7 @@
           </select>
         </div>
         <div>
-          <div class="muted" style="margin-bottom: 6px;">Руководитель проекта</div>
+          <div class="label">Руководитель проекта</div>
           {% if is_chief %}
             <input type="text" value="{{ project_chief }}" disabled />
           {% else %}
@@ -96,32 +57,41 @@
         </div>
       </div>
 
-      <div class="actions" style="margin-top: 12px;">
-        <button type="submit">Применить</button>
+      <div class="actions actions--mt-sm">
+        <button type="submit" class="button is-primary">Применить</button>
       </div>
     </form>
   </div>
 
   {% if report_type == 'gant' %}
-    <div class="card">
-      <h3 style="margin-top: 0;">Диаграмма Ганта</h3>
+    <div class="box">
+      <h3 class="section-title">Диаграмма Ганта</h3>
       {% if gant_employees|length == 0 %}
         <div class="muted">Нет данных для выбранного периода.</div>
       {% else %}
+        <p class="table-scroll-hint table-scroll-hint--mobile-only">Таблицу можно прокручивать по горизонтали и вертикали.</p>
         <div class="gantt-wrap">
           <table class="gantt-table">
+            <colgroup>
+              <col class="gantt-col-employee-def" />
+              {% for _ in gant_days %}
+                <col class="gantt-col-day-def" />
+              {% endfor %}
+            </colgroup>
             <thead>
               <tr>
-                <th>Сотрудник<br /><span class="muted" style="font-weight: 400; font-size: 12px;">short_name</span></th>
+                <th class="gantt-col-employee" scope="col">
+                  Сотрудник <span class="muted muted--sub">(short_name)</span>
+                </th>
                 {% for d in gant_days %}
-                  <th style="width: 70px;">{{ d.strftime('%d-%m') }}</th>
+                  <th class="col-day">{{ d.strftime('%d-%m') }}</th>
                 {% endfor %}
               </tr>
             </thead>
             <tbody>
               {% for w in gant_employees %}
                 <tr>
-                  <td>{{ w }}</td>
+                  <td class="gantt-col-employee" title="{{ w }}">{{ w }}</td>
                   {% for d in gant_days %}
                     <td>
                       {% set contracts = gant_cells[w][d] %}
@@ -138,8 +108,8 @@
       {% endif %}
     </div>
   {% elif report_type == 'util' %}
-    <div class="card">
-      <h3 style="margin-top: 0;">Отчет по утилизации</h3>
+    <div class="box">
+      <h3 class="section-title">Отчет по утилизации</h3>
       {% if util_employees|length == 0 %}
         <div class="muted">Нет данных для выбранного периода.</div>
       {% else %}
@@ -150,23 +120,25 @@
               <span class="util-summary">{{ w }}</span>
               : всего дней = {{ total_days }}
             </summary>
-            <div style="margin-top: 10px;">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Проект</th>
-                    <th>Количество дней</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {% for contract_number, days in util_by_employee[w].items() %}
+            <div class="util-emp__body">
+              <div class="table-wrap table-wrap--sticky">
+                <table class="table is-striped is-hoverable is-fullwidth">
+                  <thead>
                     <tr>
-                      <td>{{ contract_number }}</td>
-                      <td>{{ days }}</td>
+                      <th>Проект</th>
+                      <th class="num">Количество дней</th>
                     </tr>
-                  {% endfor %}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {% for contract_number, days in util_by_employee[w].items() %}
+                      <tr>
+                        <td>{{ contract_number }}</td>
+                        <td class="num">{{ days }}</td>
+                      </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </details>
         {% endfor %}
@@ -175,21 +147,21 @@
   {% endif %}
 
   {% if report_type == 'econ' %}
-    <div class="card">
-      <h3 style="margin-top: 0;">Экономика проектов</h3>
+    <div class="box">
+      <h3 class="section-title">Экономика проектов</h3>
       {% if economy_rows|length == 0 %}
         <div class="muted">Нет данных для выбранного периода.</div>
       {% else %}
-        <form method="get" action="{{ url_for('reports') }}" style="margin-bottom: 10px;">
+        <form method="get" action="{{ url_for('reports') }}" class="form-econ-sort">
           <input type="hidden" name="report_type" value="econ" />
           <input type="hidden" name="date_start" value="{{ date_start }}" />
           <input type="hidden" name="date_end" value="{{ date_end }}" />
           <input type="hidden" name="contract_kind" value="{{ contract_kind or '' }}" />
           <input type="hidden" name="project_chief" value="{{ project_chief or '' }}" />
 
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; max-width: 520px;">
+          <div class="grid-2 grid-2--max-sm">
             <div>
-              <div class="muted" style="margin-bottom: 6px;">Сортировка</div>
+              <div class="label">Сортировка</div>
               <select name="sort_by">
                 <option value="" {% if not sort_by %}selected{% endif %}>(по умолчанию)</option>
                 <option value="margin" {% if sort_by == 'margin' %}selected{% endif %}>Маржа</option>
@@ -198,60 +170,62 @@
               </select>
             </div>
             <div>
-              <div class="muted" style="margin-bottom: 6px;">Направление</div>
+              <div class="label">Направление</div>
               <select name="sort_dir">
                 <option value="desc" {% if sort_dir == 'desc' %}selected{% endif %}>По убыванию</option>
                 <option value="asc" {% if sort_dir == 'asc' %}selected{% endif %}>По возрастанию</option>
               </select>
             </div>
           </div>
-          <div class="actions">
-            <button type="submit">Отсортировать</button>
+          <div class="actions actions--zero">
+            <button type="submit" class="button is-primary">Отсортировать</button>
           </div>
         </form>
 
-        <table>
-          <thead>
-            <tr>
-              <th>Номер проекта</th>
-              <th>Этап проекта</th>
-              <th>Заказчик</th>
-              <th>Доход по проекту</th>
-              <th>Затраты по проекту</th>
-              <th>Затраты на премии</th>
-              <th>Затраты на командировки</th>
-              <th>Затраты на подрядчиков</th>
-              <th>Всего затрат</th>
-              <th>Прибыль проекта</th>
-              <th>Маржа</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for r in economy_rows %}
-              <tr class="{% if (r.project_income or 0) < 0 %}negative-income{% endif %}">
-                <td>{{ r.contract_number }}</td>
-                <td>{{ r.etap_number }}</td>
-                <td>{{ r.client_name }}</td>
-                <td>{{ (r.project_revenue or 0)|format_int_grouped }}</td>
-                <td>{{ (r.cost_revenue or 0)|format_int_grouped }}</td>
-                <td>{{ (r.bonus_cost or 0)|format_int_grouped }}</td>
-                <td>{{ (r.voyages_cost or 0)|format_int_grouped }}</td>
-                <td>{{ (r.contracters_cost or 0)|format_int_grouped }}</td>
-                <td>{{ (r.total_costs or 0)|format_int_grouped }}</td>
-                <td class="econ-profit">{{ (r.project_income or 0)|format_int_grouped }}</td>
-                <td>
-                  {% if r.margin_rate is none %}
-                    —
-                  {% else %}
-                    {{ "%.1f"|format((r.margin_rate or 0) * 100) }}%
-                  {% endif %}
-                </td>
+        <p class="table-scroll-hint table-scroll-hint--mobile-only">Таблицу можно прокручивать по горизонтали.</p>
+        <div class="table-wrap table-wrap--sticky">
+          <table class="table is-striped is-hoverable is-fullwidth">
+            <thead>
+              <tr>
+                <th>Номер проекта</th>
+                <th>Этап проекта</th>
+                <th>Заказчик</th>
+                <th class="num">Доход по проекту</th>
+                <th class="num">Затраты по проекту</th>
+                <th class="num">Затраты на премии</th>
+                <th class="num">Затраты на командировки</th>
+                <th class="num">Затраты на подрядчиков</th>
+                <th class="num">Всего затрат</th>
+                <th class="num">Прибыль проекта</th>
+                <th class="num">Маржа</th>
               </tr>
-            {% endfor %}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {% for r in economy_rows %}
+                <tr class="{% if (r.project_income or 0) < 0 %}negative-income{% endif %}">
+                  <td>{{ r.contract_number }}</td>
+                  <td>{{ r.etap_number }}</td>
+                  <td>{{ r.client_name }}</td>
+                  <td class="num">{{ (r.project_revenue or 0)|format_int_grouped }}</td>
+                  <td class="num">{{ (r.cost_revenue or 0)|format_int_grouped }}</td>
+                  <td class="num">{{ (r.bonus_cost or 0)|format_int_grouped }}</td>
+                  <td class="num">{{ (r.voyages_cost or 0)|format_int_grouped }}</td>
+                  <td class="num">{{ (r.contracters_cost or 0)|format_int_grouped }}</td>
+                  <td class="num">{{ (r.total_costs or 0)|format_int_grouped }}</td>
+                  <td class="econ-profit num">{{ (r.project_income or 0)|format_int_grouped }}</td>
+                  <td class="num">
+                    {% if r.margin_rate is none %}
+                      —
+                    {% else %}
+                      {{ "%.1f"|format((r.margin_rate or 0) * 100) }}%
+                    {% endif %}
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
       {% endif %}
     </div>
   {% endif %}
 {% endblock %}
-

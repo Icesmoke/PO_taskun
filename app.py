@@ -1,16 +1,31 @@
 from typing import Any, Dict, List
 
 import datetime as dt
+import logging
+import os
 from typing import Set, Tuple
 
 from flask import Flask, flash, redirect, render_template, request, session, url_for
 from flask_session import Session
 
-from config import HOST, PORT, EXCEL_TEMPLATE_PATH, SECRET_KEY, SESSION_FILE_DIR
+from config import (
+    HOST,
+    PORT,
+    EXCEL_TEMPLATE_PATH,
+    SECRET_KEY,
+    SESSION_COOKIE_HTTPONLY,
+    SESSION_COOKIE_SAMESITE,
+    SESSION_COOKIE_SECURE,
+    SESSION_FILE_DIR,
+)
 from db import (
+    bonus_row_exists,
+    contracter_row_exists,
     create_project,
     create_worker,
     disable_worker,
+    project_stage_exists,
+    voyage_row_exists,
     fetch_project_statuses,
     fetch_project_status_catalog,
     fetch_projects,
@@ -57,6 +72,18 @@ from reports_service import (
 )
 from workdays import calendar_for_period
 
+logger = logging.getLogger("po_taskun")
+
+_SECURITY_CSP = (
+    "default-src 'self'; "
+    "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com; "
+    "font-src 'self' https://fonts.gstatic.com; "
+    "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+    "connect-src 'self'; "
+    "img-src 'self' data:; "
+    "frame-ancestors 'none';"
+)
+
 
 def create_app() -> Flask:
     app = Flask(__name__, template_folder="templates", static_folder="static")
@@ -68,8 +95,19 @@ def create_app() -> Flask:
         SESSION_FILE_DIR=SESSION_FILE_DIR,
         SESSION_PERMANENT=False,
         SESSION_USE_SIGNER=True,
+        SESSION_COOKIE_HTTPONLY=SESSION_COOKIE_HTTPONLY,
+        SESSION_COOKIE_SAMESITE=SESSION_COOKIE_SAMESITE,
+        SESSION_COOKIE_SECURE=SESSION_COOKIE_SECURE,
     )
     Session(app)
+
+    @app.after_request
+    def set_security_headers(response):
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Content-Security-Policy"] = _SECURITY_CSP
+        return response
 
     app.jinja_env.filters["format_date"] = format_date_ddmmyyyy
     def _format_int_grouped(value: object) -> str:
@@ -328,9 +366,9 @@ def create_app() -> Flask:
 
         try:
             create_project(project)
-        except Exception as e:
-            # SQLite integrity errors and others.
-            flash(f"Не удалось создать проект: {e}", "error")
+        except Exception:
+            logger.exception("create_project failed for contract=%s etap=%s", contract_number, etap_number)
+            flash("Не удалось создать проект. Обратитесь к администратору.", "error")
             return redirect(url_for("projects"))
 
         flash("Проект создан.", "success")
@@ -803,6 +841,10 @@ def create_app() -> Flask:
             flash("Неверный формат данных (дата: dd.mm.YYYY, числа: 123 или 123,5).", "error")
             return redirect(url_for("data_input", tab="bonuses"))
 
+        if not project_stage_exists(contract_number, etap_number):
+            flash("Проект (договор + этап) не найден в справочнике.", "error")
+            return redirect(url_for("data_input", tab="bonuses"))
+
         insert_bonus(
             {
                 "contract_number": contract_number,
@@ -828,7 +870,11 @@ def create_app() -> Flask:
         if not rid.isdigit():
             flash("Выберите строку для удаления.", "error")
             return redirect(url_for("data_input", tab="bonuses"))
-        delete_bonus_by_rid(int(rid))
+        rid_int = int(rid)
+        if not bonus_row_exists(rid_int):
+            flash("Запись не найдена.", "error")
+            return redirect(url_for("data_input", tab="bonuses"))
+        delete_bonus_by_rid(rid_int)
         flash("Запись удалена.", "success")
         return redirect(url_for("data_input", tab="bonuses"))
 
@@ -860,6 +906,10 @@ def create_app() -> Flask:
             flash("Неверный формат данных (дата: dd.mm.YYYY, сумма: 123 или 123,5).", "error")
             return redirect(url_for("data_input", tab="voyages"))
 
+        if not project_stage_exists(contract_number, etap_number):
+            flash("Проект (договор + этап) не найден в справочнике.", "error")
+            return redirect(url_for("data_input", tab="voyages"))
+
         insert_voyage(
             {
                 "contract_number": contract_number,
@@ -885,7 +935,11 @@ def create_app() -> Flask:
         if not rid.isdigit():
             flash("Выберите строку для удаления.", "error")
             return redirect(url_for("data_input", tab="voyages"))
-        delete_voyage_by_rid(int(rid))
+        rid_int = int(rid)
+        if not voyage_row_exists(rid_int):
+            flash("Запись не найдена.", "error")
+            return redirect(url_for("data_input", tab="voyages"))
+        delete_voyage_by_rid(rid_int)
         flash("Запись удалена.", "success")
         return redirect(url_for("data_input", tab="voyages"))
 
@@ -920,6 +974,10 @@ def create_app() -> Flask:
             flash("Неверный формат данных (даты: dd.mm.YYYY, числа: 123 или 123,5).", "error")
             return redirect(url_for("data_input", tab="contracters"))
 
+        if not project_stage_exists(contract_number, etap_number):
+            flash("Проект (договор + этап) не найден в справочнике.", "error")
+            return redirect(url_for("data_input", tab="contracters"))
+
         insert_contracter(
             {
                 "contract_number": contract_number,
@@ -947,7 +1005,11 @@ def create_app() -> Flask:
         if not rid.isdigit():
             flash("Выберите строку для удаления.", "error")
             return redirect(url_for("data_input", tab="contracters"))
-        delete_contracter_by_rid(int(rid))
+        rid_int = int(rid)
+        if not contracter_row_exists(rid_int):
+            flash("Запись не найдена.", "error")
+            return redirect(url_for("data_input", tab="contracters"))
+        delete_contracter_by_rid(rid_int)
         flash("Запись удалена.", "success")
         return redirect(url_for("data_input", tab="contracters"))
 
@@ -1010,8 +1072,14 @@ def create_app() -> Flask:
         except Exception:
             count = 0
 
+        allowed_workers = set(fetch_worker_short_names())
+        allowed_statuses = set(fetch_task_statuses())
         tasks: List[Dict[str, Any]] = []
+        card_url = url_for("project_card", contract_number=contract_number, etap_number=etap_number)
+
         for i in range(count):
+            start_raw = request.form.get(f"task_start_date_{i}", "").strip()
+            end_raw = request.form.get(f"task_end_date_{i}", "").strip()
             t = {
                 "contract_number": contract_number,
                 "etap_number": etap_number,
@@ -1022,14 +1090,41 @@ def create_app() -> Flask:
                 "working_file": request.form.get(f"working_file_{i}", "").strip(),
                 "task_status": request.form.get(f"task_status_{i}", "").strip(),
             }
-            # Dates are dd.mm.YYYY
-            start_raw = request.form.get(f"task_start_date_{i}", "").strip()
-            end_raw = request.form.get(f"task_end_date_{i}", "").strip()
-            t["task_start_date"] = normalize_sqlite_timestamp_date(start_raw)
-            t["task_end_date"] = normalize_sqlite_timestamp_date(end_raw)
+            has_data = any(
+                [
+                    t["task_name"],
+                    t["task_adenda"],
+                    t["worker_name"],
+                    t["task_comment"],
+                    t["working_file"],
+                    t["task_status"],
+                    start_raw,
+                    end_raw,
+                ]
+            )
+            if not has_data:
+                continue
+
+            if t["worker_name"] and t["worker_name"] not in allowed_workers:
+                flash("Некорректный исполнитель задачи.", "error")
+                return redirect(card_url)
+            if t["task_status"] and t["task_status"] not in allowed_statuses:
+                flash("Некорректный статус задачи.", "error")
+                return redirect(card_url)
+
+            try:
+                if start_raw:
+                    parse_date_from_ddmmyyyy(start_raw)
+                if end_raw:
+                    parse_date_from_ddmmyyyy(end_raw)
+            except ValueError:
+                flash("Неверный формат дат (ожидается dd.mm.YYYY).", "error")
+                return redirect(card_url)
+
+            t["task_start_date"] = normalize_sqlite_timestamp_date(start_raw) if start_raw else ""
+            t["task_end_date"] = normalize_sqlite_timestamp_date(end_raw) if end_raw else ""
             tasks.append(t)
 
-        # Replace in DB
         replace_project_tasks(contract_number, etap_number, tasks)
 
         draft_key = f"draft::{contract_number}::{etap_number}"
@@ -1118,6 +1213,8 @@ def create_app() -> Flask:
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
     app = create_app()
-    app.run(host=HOST, port=PORT, debug=True)
+    debug = os.environ.get("FLASK_DEBUG", "").strip().lower() in ("1", "true", "yes", "on")
+    app.run(host=HOST, port=PORT, debug=debug)
 

@@ -1,0 +1,33 @@
+# Git и окружение
+.git
+.gitignore
+**/.git
+
+# Виртуальное окружение
+venv
+.venv
+**/__pycache__
+*.py[cod]
+*$py.class
+
+# Локальные данные (в контейнере — том /data, БД монтируется с хоста)
+flask_session
+flask_session*/
+taskun.sqlite
+taskun.sqlite-*
+*.sqlite-journal
+
+# IDE
+.vscode
+.idea
+
+# Архив и лишнее
+_archive
+
+# Docker
+Dockerfile*
+docker-compose*.yml
+.docker
+
+# Документация (не обязательна в образе)
+*.md

@@ -1,0 +1,27 @@
+# Po_Taskun: сборка и запуск
+#
+# База: смонтируйте taskun.sqlite с хоста (файл в корне проекта, не в образе).
+# Таблица workers обязательна — иначе entrypoint завершит контейнер с ошибкой.
+#
+# TASKUN_SECRET_KEY — задайте в .env или смените значение по умолчанию.
+# За HTTPS: TASKUN_SESSION_SECURE=1
+services:
+  web:
+    build: .
+    image: po-taskun:latest
+    ports:
+      - "5000:5000"
+    environment:
+      TASKUN_SECRET_KEY: ${TASKUN_SECRET_KEY:-change-me-use-long-random-string}
+      TASKUN_DB_PATH: /data/taskun.sqlite
+      TASKUN_SESSION_DIR: /data/flask_session
+      TASKUN_EXCEL_TEMPLATE_PATH: /app/Шаблон проектное задание 1.xlsx
+      TASKUN_HOST: 0.0.0.0
+      TASKUN_PORT: "5000"
+      TASKUN_SESSION_SECURE: ${TASKUN_SESSION_SECURE:-0}
+    volumes:
+      - ./taskun.sqlite:/data/taskun.sqlite
+      - taskun_flask_session:/data/flask_session
+
+volumes:
+  taskun_flask_session:

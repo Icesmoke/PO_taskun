@@ -8,7 +8,36 @@ def get_connection() -> sqlite3.Connection:
     # Use detect_types for better parsing, but still normalize in utils.
     con = sqlite3.connect(DB_PATH)
     con.row_factory = sqlite3.Row
+    con.execute("PRAGMA foreign_keys = ON")
+    con.execute("PRAGMA journal_mode = WAL")
     return con
+
+
+def project_stage_exists(contract_number: str, etap_number: str) -> bool:
+    with get_connection() as con:
+        row = con.execute(
+            "SELECT 1 FROM projects WHERE contract_number = ? AND etap_number = ? LIMIT 1",
+            (contract_number, etap_number),
+        ).fetchone()
+        return row is not None
+
+
+def bonus_row_exists(rid: int) -> bool:
+    with get_connection() as con:
+        row = con.execute("SELECT 1 FROM bonuses WHERE rowid = ? LIMIT 1", (rid,)).fetchone()
+        return row is not None
+
+
+def voyage_row_exists(rid: int) -> bool:
+    with get_connection() as con:
+        row = con.execute("SELECT 1 FROM voyages WHERE rowid = ? LIMIT 1", (rid,)).fetchone()
+        return row is not None
+
+
+def contracter_row_exists(rid: int) -> bool:
+    with get_connection() as con:
+        row = con.execute("SELECT 1 FROM contracters WHERE rowid = ? LIMIT 1", (rid,)).fetchone()
+        return row is not None
 
 
 def fetch_distinct_values(table: str, column: str) -> List[str]:
@@ -80,10 +109,11 @@ def insert_bonus(row: Dict[str, Any]) -> None:
         con.commit()
 
 
-def delete_bonus_by_rid(rid: int) -> None:
+def delete_bonus_by_rid(rid: int) -> bool:
     with get_connection() as con:
-        con.execute("DELETE FROM bonuses WHERE rowid = ?", (rid,))
+        cur = con.execute("DELETE FROM bonuses WHERE rowid = ?", (rid,))
         con.commit()
+        return cur.rowcount > 0
 
 
 def fetch_voyages(
@@ -133,10 +163,11 @@ def insert_voyage(row: Dict[str, Any]) -> None:
         con.commit()
 
 
-def delete_voyage_by_rid(rid: int) -> None:
+def delete_voyage_by_rid(rid: int) -> bool:
     with get_connection() as con:
-        con.execute("DELETE FROM voyages WHERE rowid = ?", (rid,))
+        cur = con.execute("DELETE FROM voyages WHERE rowid = ?", (rid,))
         con.commit()
+        return cur.rowcount > 0
 
 
 def fetch_contracters_rows(
@@ -192,10 +223,11 @@ def insert_contracter(row: Dict[str, Any]) -> None:
         con.commit()
 
 
-def delete_contracter_by_rid(rid: int) -> None:
+def delete_contracter_by_rid(rid: int) -> bool:
     with get_connection() as con:
-        con.execute("DELETE FROM contracters WHERE rowid = ?", (rid,))
+        cur = con.execute("DELETE FROM contracters WHERE rowid = ?", (rid,))
         con.commit()
+        return cur.rowcount > 0
 
 
 def fetch_workers(*, enabled_only: bool = True) -> List[Dict[str, Any]]:
@@ -402,9 +434,14 @@ def update_project_fields(
 
 
 def replace_project_tasks(contract_number: str, etap_number: str, tasks: List[Dict[str, Any]]) -> None:
-    with get_connection() as con:
+    con = get_connection()
+    try:
         cur = con.cursor()
-        cur.execute("DELETE FROM tasks WHERE contract_number = ? AND etap_number = ?", (contract_number, etap_number))
+        cur.execute("BEGIN IMMEDIATE")
+        cur.execute(
+            "DELETE FROM tasks WHERE contract_number = ? AND etap_number = ?",
+            (contract_number, etap_number),
+        )
         for t in tasks:
             cur.execute(
                 """
@@ -428,6 +465,11 @@ def replace_project_tasks(contract_number: str, etap_number: str, tasks: List[Di
                 ),
             )
         con.commit()
+    except Exception:
+        con.rollback()
+        raise
+    finally:
+        con.close()
 
 
 def fetch_worker_short_names() -> List[str]:

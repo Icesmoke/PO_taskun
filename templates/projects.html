@@ -1,35 +1,45 @@
 {% extends "base.html" %}
 
 {% block content %}
-  <div class="card" style="margin-bottom: 16px;">
-    <h2 style="margin-top: 0;">Панель проектов</h2>
+  <div class="box po-mb">
+    <h2 class="page-title">Панель проектов</h2>
 
     <form method="get" action="{{ url_for('projects') }}">
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
-        <div>
-          <div class="muted" style="margin-bottom: 6px;">Вид договора</div>
-          <select multiple name="contract_kind" size="6">
+      <div class="grid-2">
+        <div class="filter-field">
+          <div class="label">Вид договора</div>
+          <select
+            multiple
+            name="contract_kind"
+            class="js-filter-multiselect"
+            data-placeholder="Виды договоров"
+          >
             {% for k in all_kinds %}
               <option value="{{ k }}" {% if k in contract_kinds %}selected{% endif %}>{{ k }}</option>
             {% endfor %}
           </select>
-          <div class="muted" style="font-size: 12px;">Множественный выбор</div>
+          <div class="text-hint">Поиск в списке, несколько значений; снять — крестик на теге.</div>
         </div>
-        <div>
-          <div class="muted" style="margin-bottom: 6px;">Организация исполнитель</div>
-          <select multiple name="executant_name" size="6">
+        <div class="filter-field">
+          <div class="label">Организация исполнитель</div>
+          <select
+            multiple
+            name="executant_name"
+            class="js-filter-multiselect"
+            data-placeholder="Исполнители"
+          >
             {% for ex in all_executants %}
               <option value="{{ ex }}" {% if ex in executant_names %}selected{% endif %}>{{ ex }}</option>
             {% endfor %}
           </select>
-          <div class="muted" style="font-size: 12px;">Множественный выбор</div>
+          <div class="text-hint">Поиск в списке, несколько значений; снять — крестик на теге.</div>
         </div>
       </div>
 
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px;">
+      <div class="grid-2 grid-2--mt">
         <div>
-          <div class="muted" style="margin-bottom: 6px;">Период (dd.mm.YYYY)</div>
-          <div class="field" style="margin-bottom: 6px;">
+          <div class="label">Период (dd.mm.YYYY)</div>
+          <div class="field field--tight">
             <label>Начало</label>
             <input type="text" name="period_start" value="{{ period_start }}" placeholder="dd.mm.YYYY" />
           </div>
@@ -37,48 +47,60 @@
             <label>Окончание</label>
             <input type="text" name="period_end" value="{{ period_end }}" placeholder="dd.mm.YYYY" />
           </div>
-          <div class="muted" style="font-size: 12px;">
+          <div class="text-hint">
             Дата начала и окончания проекта должна попадать внутрь диапазона.
           </div>
         </div>
-        <div>
-          <div class="muted" style="margin-bottom: 6px;">Статус проекта</div>
-          <select multiple name="project_status" size="6">
+        <div class="filter-field">
+          <div class="label">Статус проекта</div>
+          <select
+            multiple
+            name="project_status"
+            class="js-filter-multiselect"
+            data-placeholder="Статусы"
+          >
             {% for s in all_statuses %}
               <option value="{{ s }}" {% if s in statuses %}selected{% endif %}>{{ s }}</option>
             {% endfor %}
           </select>
-          <div class="muted" style="font-size: 12px;">Множественный выбор</div>
+          <div class="text-hint">Поиск в списке, несколько значений; снять — крестик на теге.</div>
         </div>
       </div>
 
       {% if role == 'Директор' %}
-        <div style="margin-top: 12px;">
-          <div class="muted" style="margin-bottom: 6px;">Руководитель проектов</div>
-          <select multiple name="project_chief" size="6">
+        <div class="stack-mt filter-field">
+          <div class="label">Руководитель проектов</div>
+          <select
+            multiple
+            name="project_chief"
+            class="js-filter-multiselect"
+            data-placeholder="Руководители"
+          >
             {% for ch in all_project_chiefs %}
               <option value="{{ ch }}" {% if ch in project_chiefs %}selected{% endif %}>{{ ch }}</option>
             {% endfor %}
           </select>
-          <div class="muted" style="font-size: 12px;">Множественный выбор</div>
+          <div class="text-hint">Поиск в списке, несколько значений; снять — крестик на теге.</div>
         </div>
       {% endif %}
 
       <div class="actions">
-        <button type="submit">Применить фильтры</button>
-        <a href="{{ url_for('projects') }}">Сбросить</a>
+        <button type="submit" class="button is-primary">Применить фильтры</button>
+        <a class="button is-light" href="{{ url_for('projects') }}">Сбросить</a>
       </div>
     </form>
   </div>
 
-  <div class="card">
-    <div style="display:flex; align-items:center; justify-content:space-between; gap: 12px; flex-wrap: wrap;">
-      <h2 style="margin-top: 0;">Список проектов</h2>
+  <div class="box">
+    <div class="flex-between">
+      <h2 class="page-title">Список проектов</h2>
       {% if role == 'Директор' %}
-        <button type="button" onclick="window.__openCreateProjectDialog && window.__openCreateProjectDialog()">Создать проект</button>
+        <button type="button" class="button is-primary" onclick="window.__openCreateProjectDialog && window.__openCreateProjectDialog()">Создать проект</button>
       {% endif %}
     </div>
-    <table>
+    <p class="table-scroll-hint table-scroll-hint--mobile-only">Таблицу можно прокручивать по горизонтали.</p>
+    <div class="table-wrap table-wrap--sticky">
+    <table class="table is-striped is-hoverable is-fullwidth">
       <thead>
         <tr>
           <th>Номер договора</th>
@@ -101,7 +123,10 @@
       <tbody>
         {% for p in projects %}
           {% if role == 'Директор' %}
-            <tr>
+            <tr
+              class="clickable-row"
+              data-card-href="{{ url_for('project_card', contract_number=p.contract_number, etap_number=p.etap_number) }}"
+            >
               <form method="post" action="{{ url_for('update_project') }}">
                 <td>
                   {{ p.contract_number }}
@@ -129,9 +154,9 @@
                   </select>
                 </td>
                 <td>
-                  <div class="actions" style="margin: 0;">
-                    <a href="{{ url_for('project_card', contract_number=p.contract_number, etap_number=p.etap_number) }}">Открыть</a>
-                    <button type="submit">Сохранить</button>
+                  <div class="actions actions--zero">
+                    <a class="button is-small is-link" href="{{ url_for('project_card', contract_number=p.contract_number, etap_number=p.etap_number) }}">Открыть</a>
+                    <button type="submit" class="button is-primary is-small">Сохранить</button>
                   </div>
                 </td>
                 <td>
@@ -140,12 +165,9 @@
               </form>
             </tr>
           {% else %}
-            <tr style="cursor: pointer;" onclick="window.location.href='{{ url_for('project_card', contract_number=p.contract_number, etap_number=p.etap_number) }}'">
+            <tr class="clickable-row" onclick="window.location.href='{{ url_for('project_card', contract_number=p.contract_number, etap_number=p.etap_number) }}'">
               <td>{{ p.contract_number }}</td>
               <td>{{ p.etap_number }}</td>
-            {% if role == 'Директор' %}
-              <td>{{ p.project_chief }}</td>
-            {% endif %}
             <td>{{ p.contract_kind }}</td>
             <td>{{ p.client_name }}</td>
             <td>{{ p.executant_name }}</td>
@@ -161,18 +183,19 @@
         {% endfor %}
       </tbody>
     </table>
+    </div>
   </div>
 
   {% if role == 'Директор' %}
-    <dialog id="createProjectDialog" style="max-width: 900px; width: 95%;">
+    <dialog id="createProjectDialog" class="dialog-wide">
       <form method="post" action="{{ url_for('create_project_post') }}">
-        <div style="display:flex; align-items:center; justify-content:space-between; gap: 12px;">
-          <h3 style="margin: 0;">Создание проекта</h3>
-          <button type="button" class="btn-link" onclick="window.__closeCreateProjectDialog && window.__closeCreateProjectDialog()">Закрыть</button>
+        <div class="flex-between">
+          <h3 class="dialog__title">Создание проекта</h3>
+          <button type="button" class="button is-light" onclick="window.__closeCreateProjectDialog && window.__closeCreateProjectDialog()">Закрыть</button>
         </div>
-        <div class="muted" style="margin-top: 8px;">Поля соответствуют столбцам таблицы проектов (projects_sheet).</div>
+        <div class="muted form-intro">Поля соответствуют столбцам таблицы проектов (projects_sheet).</div>
 
-        <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px;">
+        <div class="grid-2 grid-2--mt">
           <div class="field">
             <label>Номер договора *</label>
             <input type="text" name="contract_number" required />
@@ -247,8 +270,8 @@
           </div>
         </div>
 
-        <div class="actions" style="justify-content: flex-end;">
-          <button type="submit">Сохранить</button>
+        <div class="actions actions--end">
+          <button type="submit" class="button is-primary">Сохранить</button>
         </div>
       </form>
     </dialog>
@@ -264,6 +287,19 @@
         };
       })();
     </script>
+    <script>
+      (function () {
+        // Для Директора строка должна открывать карточку,
+        // но при клике по полям/кнопкам редактирования — не навигировать.
+        document.querySelectorAll("tr[data-card-href]").forEach(function (tr) {
+          tr.addEventListener("click", function (e) {
+            var target = e.target;
+            if (target && target.closest && target.closest("input,select,textarea,button,a")) return;
+            var href = tr.getAttribute("data-card-href");
+            if (href) window.location.href = href;
+          });
+        });
+      })();
+    </script>
   {% endif %}
 {% endblock %}
-

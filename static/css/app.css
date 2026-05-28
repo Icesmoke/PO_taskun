@@ -1,0 +1,1187 @@
+/* Po_Taskun — дизайн-токены (светлая по умолчанию; тёмная — html[data-theme="dark"]) */
+
+:root {
+  color-scheme: light;
+  --color-bg: #fafbfc;
+  --color-bg-alt: #f4f6f8;
+  --color-surface: #ffffff;
+  --color-border: #d1d5dc;
+  --color-border-subtle: #e5e7eb;
+  --color-text: #111827;
+  --color-muted: #4b5563;
+  --color-primary: #2563eb;
+  --color-primary-hover: #1d4ed8;
+  --color-danger: #b91c1c;
+  --color-success-bg: #ecfdf3;
+  --color-success-border: #6ee7b7;
+  --color-error-bg: #fef2f2;
+  --color-error-border: #fca5a5;
+  --color-table-header: #f3f4f6;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
+  --shadow-md: 0 4px 14px rgba(15, 23, 42, 0.08);
+  --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial,
+    sans-serif;
+  --text-base: 15px;
+  --text-sm: 13px;
+  --text-xs: 12px;
+  --leading-tight: 1.35;
+  --leading-normal: 1.55;
+  --space-xs: 6px;
+  --space-sm: 10px;
+  --space-md: 14px;
+  --space-lg: 16px;
+  --space-xl: 24px;
+  --focus-ring: 2px solid var(--color-primary);
+  --focus-offset: 2px;
+  --min-tap: 40px;
+  --sidebar-width: 260px;
+  /* Согласование с Bulma 1 (светлая палитра) */
+  --bulma-body-background-color: var(--color-bg);
+  --bulma-body-color: var(--color-text);
+  --bulma-scheme-main: #ffffff;
+  --bulma-scheme-main-bis: #f5f5f5;
+  --bulma-scheme-main-ter: #eeeeee;
+  --bulma-border: var(--color-border-subtle);
+}
+
+html[data-theme="dark"] {
+  color-scheme: dark;
+  --color-bg: #111827;
+  --color-bg-alt: #1f2937;
+  --color-surface: #1a2332;
+  --color-border: #374151;
+  --color-border-subtle: #2d3a4f;
+  --color-text: #f3f4f6;
+  --color-muted: #9ca3af;
+  --color-primary: #60a5fa;
+  --color-primary-hover: #93c5fd;
+  --color-danger: #f87171;
+  --color-success-bg: rgba(16, 185, 129, 0.14);
+  --color-success-border: #34d399;
+  --color-error-bg: rgba(248, 113, 113, 0.12);
+  --color-error-border: #f87171;
+  --color-table-header: #1f2937;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.45);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.45);
+  --focus-ring: 2px solid var(--color-primary);
+  --bulma-body-background-color: var(--color-bg);
+  --bulma-body-color: var(--color-text);
+  --bulma-scheme-main: #1a2332;
+  --bulma-scheme-main-bis: #1f2937;
+  --bulma-scheme-main-ter: #374151;
+  --bulma-border: var(--color-border-subtle);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
+  color: var(--color-text);
+  background-color: var(--color-bg);
+  min-height: 100vh;
+}
+
+/* Типографика */
+h1,
+h2,
+h3,
+h4 {
+  font-weight: 600;
+  line-height: var(--leading-tight);
+  color: var(--color-text);
+}
+
+.page-title {
+  font-size: 1.375rem;
+  font-weight: 700;
+  margin: 0 0 var(--space-lg);
+}
+
+.flex-between .page-title,
+.flex-between .section-title {
+  margin-bottom: 0;
+}
+
+.section-title {
+  font-size: 1.0625rem;
+  font-weight: 600;
+  margin: 0 0 var(--space-md);
+}
+
+.dialog__title {
+  margin: 0;
+  font-size: 1.0625rem;
+  font-weight: 600;
+}
+
+a {
+  color: var(--color-primary);
+}
+
+a:hover {
+  color: var(--color-primary-hover);
+}
+
+/* Каркас: sidebar + контент */
+.app-shell {
+  display: flex;
+  min-height: 100vh;
+  align-items: stretch;
+}
+
+aside.menu.sidebar {
+  flex: 0 0 var(--sidebar-width);
+  width: var(--sidebar-width);
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background: var(--color-surface);
+  border-right: 1px solid var(--color-border-subtle);
+  box-shadow: var(--shadow-sm);
+  z-index: 300;
+}
+
+aside.menu.sidebar .menu-list {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.sidebar__brand {
+  padding: var(--space-lg) var(--space-md);
+  font-weight: 700;
+  font-size: 1.125rem;
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.sidebar__meta {
+  padding: var(--space-sm) var(--space-md);
+  font-size: var(--text-xs);
+  line-height: 1.4;
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.sidebar__label {
+  display: block;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-muted);
+  margin-bottom: 2px;
+}
+
+.sidebar__label--gap {
+  margin-top: 8px;
+}
+
+.shell-topbar__title {
+  margin: 0;
+  font-size: var(--text-base);
+  font-weight: 600;
+}
+
+.sidebar__footer {
+  padding: var(--space-sm);
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.sidebar__footer form {
+  margin: 0;
+}
+
+.shell-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-bg);
+}
+
+.shell-topbar {
+  display: none;
+  flex-shrink: 0;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border-subtle);
+  box-shadow: var(--shadow-sm);
+}
+
+.shell-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(17, 24, 39, 0.28);
+  z-index: 250;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s;
+}
+
+.sidebar-toggle {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--min-tap);
+  min-height: var(--min-tap);
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  font-size: 1.25rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.sidebar-toggle:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.shell-content {
+  flex: 1;
+  padding-top: 0;
+}
+
+@media (max-width: 900px) {
+  .app-shell {
+    position: relative;
+  }
+
+  .sidebar {
+    position: fixed;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    height: 100vh;
+    height: 100dvh;
+    transform: translateX(-100%);
+    transition: transform 0.2s ease;
+    max-width: min(var(--sidebar-width), 92vw);
+  }
+
+  body.sidebar-open .sidebar {
+    transform: translateX(0);
+  }
+
+  body.sidebar-open .shell-backdrop {
+    display: block;
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  body.sidebar-open {
+    overflow: hidden;
+  }
+
+  .shell-topbar {
+    display: flex;
+  }
+
+  .sidebar-toggle {
+    display: inline-flex;
+  }
+}
+
+/* Гостевой экран (вход без меню) — вариант 6: визуально отделить форму от фона */
+.guest-layout {
+  min-height: 100vh;
+  padding: var(--space-lg);
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  background: linear-gradient(165deg, var(--color-bg-alt) 0%, var(--color-bg) 42%, #e8edf4 100%);
+}
+
+html[data-theme="dark"] .guest-layout {
+  background: linear-gradient(165deg, #0c1220 0%, #111827 45%, #1a2332 100%);
+}
+
+.guest-layout__theme-bar {
+  position: fixed;
+  top: var(--space-md);
+  right: var(--space-md);
+  z-index: 20;
+}
+
+.guest-layout .container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.guest-layout .box.po-narrow {
+  border: 1px solid var(--color-border-subtle);
+  box-shadow: var(--shadow-md);
+}
+
+html[data-theme="light"] .guest-layout .box.po-narrow {
+  box-shadow: 0 12px 42px rgba(15, 23, 42, 0.1);
+}
+
+/*
+ * Ширина центрального блока (+30% к 1200px → 1560px).
+ * Bulma перезаписывает простой селектор .container через медиазапросы и
+ * .container:not(.is-max-tablet):not(.is-max-desktop) — поэтому явное переопределение.
+ */
+.shell-content.container,
+.guest-layout .container {
+  max-width: calc(1200px * 1.3) !important;
+  margin-left: auto;
+  margin-right: auto;
+  padding: 0 var(--space-lg) var(--space-xl);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 420px 1fr;
+  gap: var(--space-lg);
+}
+
+@media (max-width: 960px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Карточка проекта: вариант 1 (Информация сверху, task_panel снизу) */
+.project-card-layout {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+}
+
+/* Информация о проекте: два столбца */
+.project-info-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-lg);
+}
+
+@media (max-width: 960px) {
+  .project-info-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Bulma box — доп. отступы */
+.po-mb {
+  margin-bottom: 1.5rem;
+}
+
+.po-narrow {
+  max-width: 520px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.po-profile {
+  max-width: 820px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.po-error {
+  max-width: 720px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.po-flash {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-sm);
+  margin-bottom: 1rem;
+  position: relative;
+  transition: opacity 0.28s ease, transform 0.28s ease;
+}
+
+.po-flash--leaving {
+  opacity: 0;
+  transform: translateY(-6px);
+}
+
+.po-flash__icon-wrap {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: inherit;
+  opacity: 0.92;
+}
+
+.po-flash__svg {
+  display: block;
+}
+
+.po-flash__body {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  padding-right: 2rem;
+}
+
+.po-flash .delete {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+}
+
+html[data-theme="dark"] .notification.is-danger.is-light,
+html[data-theme="dark"] .notification.is-success.is-light,
+html[data-theme="dark"] .notification.is-info.is-light {
+  background: var(--color-bg-alt);
+  color: var(--color-text);
+  border: 1px solid var(--color-border-subtle);
+}
+
+html[data-theme="dark"] .notification.is-danger.is-light {
+  border-color: var(--color-error-border);
+}
+
+html[data-theme="dark"] .notification.is-success.is-light {
+  border-color: var(--color-success-border);
+}
+
+/* Переключатель темы (вариант 7) */
+.theme-toggle__when-dark {
+  display: none !important;
+}
+
+html[data-theme="dark"] .theme-toggle__when-dark {
+  display: inline !important;
+}
+
+html[data-theme="dark"] .theme-toggle__when-light {
+  display: none !important;
+}
+
+.sidebar__theme {
+  margin-bottom: var(--space-sm);
+}
+
+html[data-theme="dark"] aside.menu.sidebar .button.is-light {
+  background: var(--color-bg-alt);
+  color: var(--color-text);
+  border-color: var(--color-border);
+}
+
+html[data-theme="dark"] .guest-layout__theme-bar .button.is-light {
+  background: var(--color-surface);
+  color: var(--color-text);
+  border-color: var(--color-border);
+}
+
+/* Доступность: явный focus (вариант 6) */
+.button:focus-visible,
+a:focus-visible,
+.file-label:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-offset);
+}
+
+a:focus-visible {
+  border-radius: var(--radius-sm);
+}
+
+/* Сетки и раскладка */
+.grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-md);
+}
+
+.grid-2--mt {
+  margin-top: var(--space-md);
+}
+
+.grid-2--max-sm {
+  max-width: 520px;
+}
+
+.stack-mt {
+  margin-top: var(--space-md);
+}
+
+.flex-between {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  flex-wrap: wrap;
+}
+
+.profile-row {
+  display: flex;
+  gap: var(--space-lg);
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.profile-sidebar {
+  width: 180px;
+  flex-shrink: 0;
+}
+
+.profile-avatar {
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-md);
+  background: var(--color-bg-alt);
+  text-align: center;
+}
+
+.profile-avatar__placeholder {
+  margin-top: var(--space-sm);
+  font-size: 50px;
+  line-height: 1;
+  color: var(--color-muted);
+}
+
+.profile-body {
+  flex: 1;
+  min-width: 200px;
+}
+
+/* Поля */
+.field {
+  margin-bottom: var(--space-sm);
+}
+
+.field label,
+label {
+  display: block;
+  margin-bottom: var(--space-xs);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--color-text);
+}
+
+.label {
+  display: block;
+  margin-bottom: var(--space-xs);
+  font-size: var(--text-sm);
+  color: var(--color-muted);
+}
+
+.text-hint {
+  margin-top: var(--space-xs);
+  font-size: var(--text-xs);
+  color: var(--color-muted);
+  line-height: var(--leading-normal);
+}
+
+.field--tight {
+  margin-bottom: var(--space-xs);
+}
+
+.muted {
+  color: var(--color-muted);
+  font-size: var(--text-sm);
+}
+
+.muted.muted--sub,
+.text-sub {
+  font-size: var(--text-xs);
+  font-weight: 400;
+}
+
+.block-mb {
+  margin-bottom: var(--space-md);
+}
+
+.block-mb-sm {
+  margin-bottom: var(--space-sm);
+}
+
+.block-mb-xs {
+  margin-bottom: var(--space-xs);
+}
+
+input[type="text"],
+input[type="password"],
+input[type="email"],
+input[type="number"],
+input[type="search"],
+input[type="date"],
+textarea,
+select {
+  width: 100%;
+  max-width: 100%;
+  min-height: var(--min-tap);
+  padding: 8px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-family: inherit;
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+  color: var(--color-text);
+  background: var(--color-surface);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+textarea {
+  min-height: 42px;
+  resize: vertical;
+}
+
+select[multiple] {
+  min-height: auto;
+  padding: 6px;
+}
+
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-offset);
+  border-color: var(--color-primary);
+}
+
+/* Сортировка в таблице задач (без Bulma) */
+.btn-sort {
+  margin-left: 4px;
+  padding: 2px 6px;
+  min-height: auto;
+  border: none;
+  background: transparent;
+  font-size: var(--text-xs);
+  cursor: pointer;
+  vertical-align: middle;
+}
+
+.btn-sort:hover {
+  background: var(--color-bg-alt);
+}
+
+.btn-sort:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* Ряды действий */
+.actions {
+  display: flex;
+  gap: var(--space-sm);
+  margin-top: var(--space-md);
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.actions--mt-sm {
+  margin-top: var(--space-sm);
+}
+
+.actions--mb {
+  margin-bottom: var(--space-sm);
+}
+
+.actions--mb-lg {
+  margin-bottom: var(--space-md);
+}
+
+.actions--zero {
+  margin: 0;
+}
+
+.actions--tight-bottom {
+  margin: 0 0 var(--space-sm) 0;
+}
+
+.actions--end {
+  justify-content: flex-end;
+}
+
+.actions--gap-sm {
+  gap: 8px;
+}
+
+.actions--toolbar {
+  margin-top: 0;
+  margin-bottom: var(--space-md);
+}
+
+/* Таблицы */
+.table-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Вертикальная прокрутка + липкая шапка (вариант 3) */
+.table-wrap--sticky {
+  overflow: auto;
+  max-height: min(75vh, 920px);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+.table-wrap--sticky table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.table-wrap--sticky thead th {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: var(--color-table-header);
+  box-shadow: 0 1px 0 var(--color-border-subtle);
+}
+
+.table-scroll-hint {
+  margin: 0 0 var(--space-sm);
+  font-size: var(--text-xs);
+  color: var(--color-muted);
+}
+
+@media (min-width: 901px) {
+  .table-scroll-hint--mobile-only {
+    display: none;
+  }
+}
+
+/* Таблицы Bulma в .table-wrap: ширина по содержимому, перенос вместо обрезки */
+/* Но для task-table нужна фиксированная ширина, чтобы колонки не "уезжали" вправо. */
+.table-wrap .table.is-fullwidth:not(.task-table) {
+  width: max-content;
+  min-width: 100%;
+  table-layout: auto;
+}
+
+.table-wrap .table th,
+.table-wrap .table td {
+  vertical-align: top;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+.table-wrap .table th.num,
+.table-wrap .table td.num {
+  white-space: nowrap;
+}
+
+table:not(.table) {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+}
+
+table:not(.table) th,
+table:not(.table) td {
+  border: 1px solid var(--color-border-subtle);
+  padding: var(--space-sm) 10px;
+  text-align: left;
+  vertical-align: top;
+}
+
+table:not(.table) th {
+  background: var(--color-table-header);
+  font-weight: 600;
+  font-size: var(--text-sm);
+}
+
+/* Полосатость/hover для таблиц без Bulma-классов (гант и т.д.) */
+.table-wrap table:not(.gantt-table):not(.table) tbody tr:nth-child(even):not(.negative-income) {
+  background: var(--color-bg-alt);
+}
+
+.table-wrap table:not(.gantt-table):not(.table) tbody tr:hover {
+  background: rgba(37, 99, 235, 0.06);
+}
+
+.clickable-row {
+  cursor: pointer;
+}
+
+th.col-check {
+  width: 48px;
+}
+
+th.col-radio,
+td.col-radio {
+  width: 40px;
+}
+
+th.col-day {
+  width: 70px;
+}
+
+.num,
+th.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Tom Select — вписать в интерфейс (вариант 4) */
+.ts-wrapper {
+  width: 100%;
+  max-width: 100%;
+}
+
+.ts-wrapper .ts-control {
+  border-radius: var(--radius-md);
+  border-color: var(--color-border);
+  min-height: 42px;
+  padding: 6px 10px;
+}
+
+.ts-wrapper.focus .ts-control {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.2);
+}
+
+.ts-dropdown {
+  border-radius: var(--radius-md);
+  border-color: var(--color-border);
+}
+
+.ts-dropdown .option {
+  padding: 8px 10px;
+}
+
+.filter-field {
+  margin-bottom: var(--space-xs);
+}
+
+/* Details */
+details {
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  padding: var(--space-md);
+  background: var(--color-bg-alt);
+  margin-bottom: var(--space-md);
+}
+
+summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: var(--text-sm);
+}
+
+summary:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* Диаграмма Ганта */
+.gantt-wrap {
+  position: relative;
+  overflow-x: auto;
+  overflow-y: visible;
+  max-width: 100%;
+  -webkit-overflow-scrolling: touch;
+}
+
+.gantt-table {
+  table-layout: fixed;
+  min-width: max(100%, 56rem);
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+/* Явная ширина колонок: фиксированная «Сотрудник», дни — по шаблону */
+.gantt-table col.gantt-col-employee-def {
+  width: 14rem;
+  min-width: 14rem;
+}
+
+.gantt-table col.gantt-col-day-def {
+  width: 4.5rem;
+  min-width: 4.5rem;
+}
+
+.gantt-table th,
+.gantt-table td {
+  border: 1px solid var(--color-border-subtle);
+  padding: 6px;
+  vertical-align: top;
+}
+
+.gantt-table thead th {
+  background: var(--color-table-header);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+/* Первая колонка «Сотрудник»: фиксированная ширина, sticky слева, непрозрачный фон, разделитель от дней */
+.gantt-table .gantt-col-employee {
+  position: -webkit-sticky;
+  position: sticky;
+  left: 0;
+  width: 14rem;
+  min-width: 14rem;
+  max-width: 14rem;
+  box-sizing: border-box;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border-right: 2px solid var(--color-border);
+  box-shadow: 6px 0 14px -6px rgba(15, 23, 42, 0.2);
+}
+
+.gantt-table thead th.gantt-col-employee {
+  top: 0;
+  z-index: 8;
+  background-color: var(--color-table-header);
+  font-weight: 600;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.gantt-table tbody td.gantt-col-employee {
+  z-index: 5;
+  background-color: var(--color-surface);
+  font-weight: 700;
+  vertical-align: middle;
+}
+
+html[data-theme="dark"] .gantt-table .gantt-col-employee {
+  box-shadow: 6px 0 14px -6px rgba(0, 0, 0, 0.45);
+}
+
+html[data-theme="dark"] .gantt-table tbody td.gantt-col-employee {
+  background-color: var(--color-surface);
+}
+
+html[data-theme="dark"] .gantt-table thead th.gantt-col-employee {
+  background-color: var(--color-table-header);
+}
+
+.pill {
+  display: inline-block;
+  padding: 3px 6px;
+  border-radius: 10px;
+  color: #fff;
+  font-size: var(--text-xs);
+  margin: 2px 2px 0 0;
+  white-space: nowrap;
+}
+
+.util-summary {
+  font-weight: 700;
+}
+
+details.util-emp {
+  margin-bottom: var(--space-sm);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  padding: var(--space-md);
+  background: var(--color-surface);
+}
+
+details.util-emp summary {
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.util-emp__body {
+  margin-top: var(--space-sm);
+}
+
+tr.negative-income td {
+  background: var(--color-error-bg) !important;
+}
+
+tr.negative-income td.econ-profit {
+  font-weight: 700;
+  color: var(--color-danger);
+}
+
+/* Карточка проекта — таблица задач: auto layout, разумные min по колонкам */
+.task-table-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  min-width: 0;
+}
+
+.task-table-wrap.table-wrap--sticky {
+  overflow-x: auto;
+  overflow-y: auto;
+  /* Раньше было слишком ограничено по высоте — казалось, что таблица "не полностью". */
+  max-height: min(85vh, 1300px);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  min-width: 0;
+}
+
+.task-table {
+  table-layout: fixed;
+  width: 100%;
+  min-width: 0;
+}
+
+.task-table th,
+.task-table td {
+  min-width: 0 !important;
+}
+
+.task-table th,
+.task-table td {
+  vertical-align: top;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+/* Полная таблица с колонкой «Выбор» — 9 колонок */
+.task-table:has(th.col-select) thead th:nth-child(1) {
+  min-width: 2.75rem;
+  width: 2.85rem;
+}
+
+.task-table:has(th.col-select) thead th:nth-child(2),
+.task-table:has(th.col-select) thead th:nth-child(3) {
+  min-width: 11rem;
+}
+
+.task-table:has(th.col-select) thead th:nth-child(4) {
+  min-width: 9rem;
+}
+
+.task-table:has(th.col-select) thead th:nth-child(5),
+.task-table:has(th.col-select) thead th:nth-child(6) {
+  min-width: 6.75rem;
+}
+
+.task-table:has(th.col-select) thead th:nth-child(7),
+.task-table:has(th.col-select) thead th:nth-child(8) {
+  min-width: 12rem;
+}
+
+.task-table:has(th.col-select) thead th:nth-child(9) {
+  min-width: 8.5rem;
+}
+
+/* Просмотр / частичное редактирование — 8 колонок (без «Выбор») */
+.task-table:not(:has(th.col-select)) thead th:nth-child(1),
+.task-table:not(:has(th.col-select)) thead th:nth-child(2) {
+  min-width: 11rem;
+}
+
+.task-table:not(:has(th.col-select)) thead th:nth-child(3) {
+  min-width: 9rem;
+}
+
+.task-table:not(:has(th.col-select)) thead th:nth-child(4),
+.task-table:not(:has(th.col-select)) thead th:nth-child(5) {
+  min-width: 6.75rem;
+}
+
+.task-table:not(:has(th.col-select)) thead th:nth-child(6),
+.task-table:not(:has(th.col-select)) thead th:nth-child(7) {
+  min-width: 12rem;
+}
+
+.task-table:not(:has(th.col-select)) thead th:nth-child(8) {
+  min-width: 8.5rem;
+}
+
+.task-table td input[type="text"],
+.task-table td input[type="password"],
+.task-table td select,
+.task-table td textarea {
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+th.col-select {
+  min-width: 2.75rem;
+  width: 2.85rem;
+}
+
+/* Диалоги HTML */
+dialog {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-md);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-md);
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+dialog::backdrop {
+  background: rgba(15, 23, 42, 0.35);
+}
+
+.dialog-wide {
+  max-width: 900px;
+  width: 95%;
+}
+
+.form-intro {
+  margin-top: var(--space-sm);
+}
+
+/* Модальное окно (панель пользователей) */
+.modal {
+  display: none;
+  position: fixed;
+  z-index: 1000;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(15, 23, 42, 0.4);
+}
+
+.modal-content {
+  background: var(--color-surface);
+  margin: 10vh auto;
+  padding: var(--space-lg);
+  border-radius: var(--radius-lg);
+  width: 500px;
+  max-width: 95%;
+  border: 1px solid var(--color-border-subtle);
+  box-shadow: var(--shadow-md);
+}
+
+.form-econ-sort {
+  margin-bottom: var(--space-sm);
+}
+
+/* Тёмная тема: оверлеи и Tom Select */
+html[data-theme="dark"] dialog::backdrop {
+  background: rgba(0, 0, 0, 0.65);
+}
+
+html[data-theme="dark"] .modal {
+  background: rgba(0, 0, 0, 0.72);
+}
+
+html[data-theme="dark"] .shell-backdrop {
+  background: rgba(0, 0, 0, 0.55);
+}
+
+html[data-theme="dark"] .ts-wrapper .ts-control {
+  background: var(--color-surface);
+  color: var(--color-text);
+  border-color: var(--color-border);
+}
+
+html[data-theme="dark"] .ts-dropdown {
+  background: var(--color-surface);
+  border-color: var(--color-border);
+  color: var(--color-text);
+}
