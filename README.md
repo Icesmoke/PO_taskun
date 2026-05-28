@@ -19,7 +19,7 @@
 Требования: Docker Engine и Docker Compose v2.
 
 ```bash
-git clone https://github.com/<USER>/PO_taskun.git
+git clone https://github.com/Icesmoke/PO_taskun.git
 cd PO_taskun
 
 # Секреты (обязательно смените TASKUN_SECRET_KEY)
@@ -40,6 +40,31 @@ docker compose up -d
 Приложение: `http://<IP-сервера>:5000`
 
 Остановка: `docker compose down`
+
+## Docker-образ в GitHub Container Registry
+
+При push в `main` GitHub Actions собирает образ и публикует его:
+
+**`ghcr.io/icesmoke/po-taskun:latest`**
+
+Просмотр: репозиторий → **Packages** → `po-taskun`.
+
+### Развёртывание только контейнера (без сборки на сервере)
+
+```bash
+git clone https://github.com/Icesmoke/PO_taskun.git
+cd PO_taskun
+cp .env.example .env && nano .env
+# положите taskun.sqlite в каталог
+
+# Приватный репозиторий: docker login ghcr.io -u Icesmoke
+docker compose -f docker-compose.registry.yml pull
+docker compose -f docker-compose.registry.yml up -d
+```
+
+Минимальный набор файлов для сервера — каталог [`deploy/`](deploy/README.md) (compose + `.env.example`).
+
+Подробнее: [deploy/README.md](deploy/README.md).
 
 ### Переменные окружения
 

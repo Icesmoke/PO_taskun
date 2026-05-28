@@ -1,0 +1,29 @@
+# Запуск готового образа из GitHub Container Registry (без локальной сборки).
+#
+#   docker login ghcr.io -u Icesmoke
+#   docker compose -f docker-compose.registry.yml pull
+#   docker compose -f docker-compose.registry.yml up -d
+#
+# Для приватного репозитория нужен PAT с read:packages.
+# Образ: ghcr.io/icesmoke/po-taskun:latest
+
+services:
+  web:
+    image: ghcr.io/icesmoke/po-taskun:latest
+    pull_policy: always
+    ports:
+      - "5000:5000"
+    environment:
+      TASKUN_SECRET_KEY: ${TASKUN_SECRET_KEY:-change-me-use-long-random-string}
+      TASKUN_DB_PATH: /data/taskun.sqlite
+      TASKUN_SESSION_DIR: /data/flask_session
+      TASKUN_EXCEL_TEMPLATE_PATH: /app/Шаблон проектное задание 1.xlsx
+      TASKUN_HOST: 0.0.0.0
+      TASKUN_PORT: "5000"
+      TASKUN_SESSION_SECURE: ${TASKUN_SESSION_SECURE:-0}
+    volumes:
+      - ./taskun.sqlite:/data/taskun.sqlite
+      - taskun_flask_session:/data/flask_session
+
+volumes:
+  taskun_flask_session:
