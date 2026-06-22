@@ -116,6 +116,29 @@ def delete_bonus_by_rid(rid: int) -> bool:
         return cur.rowcount > 0
 
 
+def update_bonus_by_rid(rid: int, row: Dict[str, Any]) -> bool:
+    with get_connection() as con:
+        cur = con.execute(
+            """
+            UPDATE bonuses
+            SET contract_number = ?, etap_number = ?, worker_name = ?,
+                task_date = ?, hours_number = ?, bonus_sum = ?
+            WHERE rowid = ?
+            """,
+            (
+                row.get("contract_number"),
+                row.get("etap_number"),
+                row.get("worker_name"),
+                row.get("task_date"),
+                row.get("hours_number"),
+                row.get("bonus_sum"),
+                rid,
+            ),
+        )
+        con.commit()
+        return cur.rowcount > 0
+
+
 def fetch_voyages(
     *,
     contract_numbers: Optional[Sequence[str]] = None,
@@ -166,6 +189,29 @@ def insert_voyage(row: Dict[str, Any]) -> None:
 def delete_voyage_by_rid(rid: int) -> bool:
     with get_connection() as con:
         cur = con.execute("DELETE FROM voyages WHERE rowid = ?", (rid,))
+        con.commit()
+        return cur.rowcount > 0
+
+
+def update_voyage_by_rid(rid: int, row: Dict[str, Any]) -> bool:
+    with get_connection() as con:
+        cur = con.execute(
+            """
+            UPDATE voyages
+            SET contract_number = ?, etap_number = ?, worker_name = ?,
+                voyage_date = ?, voyage_cost_kind = ?, voyage_cost_sum = ?
+            WHERE rowid = ?
+            """,
+            (
+                row.get("contract_number"),
+                row.get("etap_number"),
+                row.get("worker_name"),
+                row.get("voyage_date"),
+                row.get("voyage_cost_kind"),
+                row.get("voyage_cost_sum"),
+                rid,
+            ),
+        )
         con.commit()
         return cur.rowcount > 0
 
@@ -230,6 +276,32 @@ def delete_contracter_by_rid(rid: int) -> bool:
         return cur.rowcount > 0
 
 
+def update_contracter_by_rid(rid: int, row: Dict[str, Any]) -> bool:
+    with get_connection() as con:
+        cur = con.execute(
+            """
+            UPDATE contracters
+            SET contract_number = ?, etap_number = ?, contracter_name = ?,
+                task_start_date = ?, task_end_date = ?,
+                contracters_hours_number = ?, contracters_cost_sum = ?, comment = ?
+            WHERE rowid = ?
+            """,
+            (
+                row.get("contract_number"),
+                row.get("etap_number"),
+                row.get("contracter_name"),
+                row.get("task_start_date"),
+                row.get("task_end_date"),
+                row.get("contracters_hours_number"),
+                row.get("contracters_cost_sum"),
+                row.get("comment"),
+                rid,
+            ),
+        )
+        con.commit()
+        return cur.rowcount > 0
+
+
 def fetch_workers(*, enabled_only: bool = True) -> List[Dict[str, Any]]:
     with get_connection() as con:
         sql = "SELECT workers_id, full_name, short_name, worker_role, tarif_per_hour, enabled FROM workers"
@@ -281,6 +353,8 @@ def fetch_projects(
     statuses: Optional[Sequence[str]] = None,
     period_start: Optional[str] = None,  # dd.mm.YYYY
     period_end: Optional[str] = None,  # dd.mm.YYYY
+    sort_by: Optional[str] = None,
+    sort_dir: str = "asc",
 ) -> List[Dict[str, Any]]:
     """
     Return projects list for project_panel.
@@ -364,7 +438,21 @@ def fetch_projects(
     """
     if where:
         sql += " WHERE " + " AND ".join(where)
-    sql += " ORDER BY contract_number, etap_number"
+
+    sort_columns = {
+        "contract_number": "contract_number",
+        "project_chief": "project_chief",
+        "client_name": "client_name",
+        "executant_name": "executant_name",
+        "plan_start_date": "date(plan_start_date)",
+        "plan_end_date": "date(plan_end_date)",
+        "project_status": "project_status",
+    }
+    direction = "DESC" if sort_dir == "desc" else "ASC"
+    if sort_by and sort_by in sort_columns:
+        sql += f" ORDER BY {sort_columns[sort_by]} {direction}, contract_number, etap_number"
+    else:
+        sql += " ORDER BY contract_number, etap_number"
 
     with get_connection() as con:
         rows = con.execute(sql, params).fetchall()
@@ -525,6 +613,34 @@ def disable_worker(workers_id: int) -> None:
         con.commit()
 
 
+def fetch_report_contract_numbers(worker_role: str, current_short_name: str) -> List[str]:
+    """Distinct contract numbers visible in reports (same scope as contract_kind filter)."""
+    with get_connection() as con:
+        if worker_role == "Руководитель проекта":
+            rows = con.execute(
+                """
+                SELECT DISTINCT contract_number
+                FROM projects
+                WHERE project_chief = ?
+                  AND contract_number IS NOT NULL
+                  AND TRIM(contract_number) <> ''
+                ORDER BY contract_number
+                """,
+                (current_short_name,),
+            ).fetchall()
+        else:
+            rows = con.execute(
+                """
+                SELECT DISTINCT contract_number
+                FROM projects
+                WHERE contract_number IS NOT NULL
+                  AND TRIM(contract_number) <> ''
+                ORDER BY contract_number
+                """
+            ).fetchall()
+        return [r[0] for r in rows]
+
+
 def fetch_report_contract_kinds(worker_role: str, current_short_name: str) -> List[str]:
     with get_connection() as con:
         if worker_role == "Руководитель проекта":
@@ -557,12 +673,14 @@ def fetch_tasks_intervals_for_reports(
     current_short_name: str,
     contract_kind: Optional[str] = None,
     project_chief: Optional[str] = None,
+    contract_number: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     """
     Returns task intervals clipped to [start_date_iso, end_date_iso] and filtered by:
     - role visibility (chief sees only their projects)
     - contract_kind (optional)
     - project_chief (optional, but for chief it's forced by role)
+    - contract_number (optional)
     """
     with get_connection() as con:
         where = []
@@ -587,6 +705,10 @@ def fetch_tasks_intervals_for_reports(
         if project_chief and worker_role != "Руководитель проекта":
             where.append("p.project_chief = ?")
             params.append(project_chief)
+
+        if contract_number:
+            where.append("t.contract_number = ?")
+            params.append(contract_number)
 
         sql = f"""
             SELECT
@@ -615,6 +737,7 @@ def fetch_tasks_date_bounds_for_reports(
     current_short_name: str,
     contract_kind: Optional[str] = None,
     project_chief: Optional[str] = None,
+    contract_number: Optional[str] = None,
 ) -> Tuple[Optional[str], Optional[str]]:
     """
     Returns (min_date_iso, max_date_iso) in YYYY-MM-DD based on task_start/task_end overlap.
@@ -635,6 +758,10 @@ def fetch_tasks_date_bounds_for_reports(
         if project_chief and worker_role != "Руководитель проекта":
             where.append("p.project_chief = ?")
             params.append(project_chief)
+
+        if contract_number:
+            where.append("t.contract_number = ?")
+            params.append(contract_number)
 
         where_sql = ("WHERE " + " AND ".join(where)) if where else ""
 

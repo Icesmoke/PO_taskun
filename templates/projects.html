@@ -1,5 +1,17 @@
 {% extends "base.html" %}
 
+{% macro sort_btn(column, label) %}
+  <th class="th-sortable">
+    <span class="th-sortable__label">{{ label }}</span>
+    <a
+      class="btn-sort{% if sort_by == column %} is-active{% endif %}"
+      href="{{ projects_sort_url(column) }}"
+      title="Сортировать по «{{ label }}»{% if sort_by == column %} ({{ 'по возрастанию' if sort_dir == 'asc' else 'по убыванию' }}){% endif %}"
+      aria-label="Сортировать по {{ label }}"
+    >{% if sort_by == column %}{% if sort_dir == 'asc' %}↑{% else %}↓{% endif %}{% else %}⇅{% endif %}</a>
+  </th>
+{% endmacro %}
+
 {% block content %}
   <div class="box po-mb">
     <h2 class="page-title">Панель проектов</h2>
@@ -84,6 +96,11 @@
         </div>
       {% endif %}
 
+      {% if sort_by %}
+        <input type="hidden" name="sort_by" value="{{ sort_by }}" />
+        <input type="hidden" name="sort_dir" value="{{ sort_dir }}" />
+      {% endif %}
+
       <div class="actions">
         <button type="submit" class="button is-primary">Применить фильтры</button>
         <a class="button is-light" href="{{ url_for('projects') }}">Сбросить</a>
@@ -103,17 +120,17 @@
     <table class="table is-striped is-hoverable is-fullwidth">
       <thead>
         <tr>
-          <th>Номер договора</th>
+          {{ sort_btn('contract_number', 'Номер договора') }}
           <th>Этап</th>
           {% if role == 'Директор' %}
-            <th>Руководитель проекта</th>
+            {{ sort_btn('project_chief', 'Руководитель проекта') }}
           {% endif %}
           <th>Вид договора</th>
-          <th>Заказчик</th>
-          <th>Исполнитель</th>
-          <th>План. дата начала</th>
-          <th>План. дата окончания</th>
-          <th>Статус</th>
+          {{ sort_btn('client_name', 'Заказчик') }}
+          {{ sort_btn('executant_name', 'Исполнитель') }}
+          {{ sort_btn('plan_start_date', 'План. дата начала') }}
+          {{ sort_btn('plan_end_date', 'План. дата окончания') }}
+          {{ sort_btn('project_status', 'Статус') }}
           {% if role == 'Директор' %}
             <th>Действия</th>
             <th>Дата акта</th>

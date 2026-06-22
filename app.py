@@ -33,6 +33,7 @@ from db import (
     fetch_tasks_date_bounds_for_reports,
     fetch_tasks_intervals_for_reports,
     fetch_report_contract_kinds,
+    fetch_report_contract_numbers,
     fetch_report_project_chiefs,
     fetch_economy_report_rows,
     fetch_economy_revenue_rows,
@@ -56,6 +57,9 @@ from db import (
     delete_contracter_by_rid,
     replace_project_tasks,
     update_project_fields,
+    update_bonus_by_rid,
+    update_voyage_by_rid,
+    update_contracter_by_rid,
 )
 from excel_parser import parse_tasks_from_xlsx
 from utils import (
@@ -69,6 +73,7 @@ from reports_service import (
     build_gantt_model,
     build_utilisation_model,
     daterange_inclusive,
+    employee_project_workdays,
 )
 from workdays import calendar_for_period
 
@@ -177,6 +182,9 @@ def create_app() -> Flask:
     def can_use_data_input(worker_role: str) -> bool:
         return worker_role == "Директор"
 
+    def can_edit_data_input(worker_role: str) -> bool:
+        return worker_role == "Директор"
+
     # --- Routes ---
     @app.get("/")
     def root():
@@ -261,6 +269,22 @@ def create_app() -> Flask:
                 flash("Неверный формат периода окончания (ожидается dd.mm.YYYY).", "error")
                 period_end = None
 
+        sort_by = (request.args.get("sort_by") or "").strip() or None
+        sort_dir = (request.args.get("sort_dir") or "asc").strip().lower()
+        if sort_dir not in {"asc", "desc"}:
+            sort_dir = "asc"
+        allowed_sort = {
+            "contract_number",
+            "project_chief",
+            "client_name",
+            "executant_name",
+            "plan_start_date",
+            "plan_end_date",
+            "project_status",
+        }
+        if sort_by not in allowed_sort:
+            sort_by = None
+
         projects_rows = fetch_projects(
             role=role,
             current_short_name=short_name,
@@ -270,6 +294,8 @@ def create_app() -> Flask:
             statuses=statuses,
             period_start=period_start,
             period_end=period_end,
+            sort_by=sort_by,
+            sort_dir=sort_dir,
         )
 
         # Filter choice lists:
@@ -280,6 +306,21 @@ def create_app() -> Flask:
         all_project_chiefs = fetch_report_project_chiefs(role, short_name) if is_director(role) else []
         all_statuses = fetch_project_statuses()
         status_catalog = fetch_project_status_catalog() if is_director(role) else []
+
+        def projects_sort_url(column: str) -> str:
+            from urllib.parse import urlencode
+
+            params = request.args.to_dict(flat=False)
+            next_dir = "desc" if sort_by == column and sort_dir == "asc" else "asc"
+            params["sort_by"] = [column]
+            params["sort_dir"] = [next_dir]
+            pairs: List[tuple[str, str]] = []
+            for key, values in params.items():
+                for value in values:
+                    if value is not None and str(value) != "":
+                        pairs.append((key, str(value)))
+            query = urlencode(pairs)
+            return url_for("projects") + ("?" + query if query else "")
 
         return render_template(
             "projects.html",
@@ -297,6 +338,9 @@ def create_app() -> Flask:
             statuses=statuses or [],
             period_start=period_start or "",
             period_end=period_end or "",
+            sort_by=sort_by or "",
+            sort_dir=sort_dir,
+            projects_sort_url=projects_sort_url,
         )
 
     @app.post("/projects/create")
@@ -511,9 +555,17 @@ def create_app() -> Flask:
         if report_type not in {"gant", "util", "econ"}:
             report_type = "gant"
 
+        is_director = role == "Директор"
+        if report_type == "util" and not is_director:
+            flash("Отчёт по утилизации доступен только Директору.", "error")
+            return redirect(url_for("reports", report_type="gant"))
+
         # Filters
         contract_kind = request.args.get("contract_kind", "").strip() or None
         project_chief = request.args.get("project_chief", "").strip() or None
+        contract_number = request.args.get("contract_number", "").strip() or None
+        if report_type != "gant":
+            contract_number = None
         sort_by = request.args.get("sort_by", "").strip().lower() or None
         sort_dir = request.args.get("sort_dir", "desc").strip().lower()
         if sort_dir not in {"asc", "desc"}:
@@ -532,6 +584,7 @@ def create_app() -> Flask:
             current_short_name=current_short_name(),
             contract_kind=contract_kind,
             project_chief=project_chief,
+            contract_number=contract_number,
         )
 
         def iso_to_ddmmyyyy(iso: str) -> str:
@@ -587,6 +640,7 @@ def create_app() -> Flask:
             current_short_name=current_short_name(),
             contract_kind=contract_kind,
             project_chief=effective_project_chief,
+            contract_number=contract_number,
         )
 
         # Convert to domain model and clip to selected date range
@@ -610,6 +664,7 @@ def create_app() -> Flask:
 
         # Filter choices
         contract_kinds = fetch_report_contract_kinds(role, current_short_name())
+        contract_numbers = fetch_report_contract_numbers(role, current_short_name())
         project_chiefs = fetch_report_project_chiefs(role, current_short_name())
 
         gant_employees: List[str] = []
@@ -620,6 +675,8 @@ def create_app() -> Flask:
         util_employees: List[str] = []
         util_by_employee: Dict[str, Dict[str, int]] = {}
         util_total_by_employee: Dict[str, int] = {}
+        util_period_workdays: int = 0
+        util_rate_by_employee: Dict[str, float] = {}
 
         economy_rows: List[Dict[str, Any]] = []
         done_status_name = fetch_done_task_status_name()
@@ -629,11 +686,18 @@ def create_app() -> Flask:
             if intervals:
                 gant_employees, gant_days, gant_cells, gant_colors = build_gantt_model(intervals, gant_days)
         elif report_type == "util":
+            cal = calendar_for_period(date_start, date_end)
+            util_period_workdays = len(cal.workdays_inclusive(date_start, date_end))
             if intervals:
-                cal = calendar_for_period(date_start, date_end)
                 util_employees, util_by_employee = build_utilisation_model(intervals, calendar=cal)
+                project_days = employee_project_workdays(intervals, calendar=cal)
                 for w in util_employees:
-                    util_total_by_employee[w] = sum(util_by_employee.get(w, {}).values())
+                    days_on_projects = project_days.get(w, 0)
+                    util_total_by_employee[w] = days_on_projects
+                    if util_period_workdays:
+                        util_rate_by_employee[w] = 100.0 * days_on_projects / util_period_workdays
+                    else:
+                        util_rate_by_employee[w] = 0.0
         else:
             cal = calendar_for_period(date_start, date_end)
 
@@ -737,9 +801,12 @@ def create_app() -> Flask:
             date_start=date_start_raw,
             date_end=date_end_raw,
             contract_kind=contract_kind,
+            contract_number=contract_number,
             project_chief=effective_project_chief,
+            is_director=is_director,
             is_chief=is_chief,
             contract_kinds=contract_kinds,
+            contract_numbers=contract_numbers,
             project_chiefs=project_chiefs,
             # gant
             gant_employees=gant_employees,
@@ -750,6 +817,8 @@ def create_app() -> Flask:
             util_employees=util_employees,
             util_by_employee=util_by_employee,
             util_total_by_employee=util_total_by_employee,
+            util_period_workdays=util_period_workdays,
+            util_rate_by_employee=util_rate_by_employee,
             # economy
             economy_rows=economy_rows,
             sort_by=sort_by or "",
@@ -866,7 +935,7 @@ def create_app() -> Flask:
         if not can_use_data_input(current_role()):
             flash("Нет доступа.", "error")
             return redirect(url_for("projects"))
-        rid = (request.form.get("rid") or "").strip()
+        rid = (request.form.get("bonus_rid") or "").strip()
         if not rid.isdigit():
             flash("Выберите строку для удаления.", "error")
             return redirect(url_for("data_input", tab="bonuses"))
@@ -876,6 +945,65 @@ def create_app() -> Flask:
             return redirect(url_for("data_input", tab="bonuses"))
         delete_bonus_by_rid(rid_int)
         flash("Запись удалена.", "success")
+        return redirect(url_for("data_input", tab="bonuses"))
+
+    @app.post("/data_input/bonuses/update")
+    def data_input_bonuses_update():
+        redir = require_login()
+        if redir:
+            return redir
+        if not can_edit_data_input(current_role()):
+            flash("Редактирование доступно только Директору.", "error")
+            return redirect(url_for("projects"))
+
+        rid_raw = (request.form.get("rid") or "").strip()
+        if not rid_raw.isdigit():
+            flash("Запись для сохранения не указана.", "error")
+            return redirect(url_for("data_input", tab="bonuses"))
+        rid_int = int(rid_raw)
+        if not bonus_row_exists(rid_int):
+            flash("Запись не найдена.", "error")
+            return redirect(url_for("data_input", tab="bonuses"))
+
+        contract_number = (request.form.get("contract_number") or "").strip()
+        etap_number = (request.form.get("etap_number") or "").strip()
+        worker_name = (request.form.get("worker_name") or "").strip()
+        task_date_ui = (request.form.get("task_date") or "").strip()
+        hours_raw = (request.form.get("hours_number") or "").strip()
+        bonus_raw = (request.form.get("bonus_sum") or "").strip()
+
+        if not contract_number or not etap_number or not worker_name or not task_date_ui:
+            flash("Заполните обязательные поля: Договор, Этап, Сотрудник, Дата.", "error")
+            return redirect(url_for("data_input", tab="bonuses"))
+
+        try:
+            parse_date_from_ddmmyyyy(task_date_ui)
+            task_date_db = normalize_sqlite_timestamp_date(task_date_ui)
+            hours = float(hours_raw.replace(",", ".")) if hours_raw else None
+            bonus_sum = float(bonus_raw.replace(",", ".")) if bonus_raw else None
+        except Exception:
+            flash("Неверный формат данных (дата: dd.mm.YYYY, числа: 123 или 123,5).", "error")
+            return redirect(url_for("data_input", tab="bonuses"))
+
+        if not project_stage_exists(contract_number, etap_number):
+            flash("Проект (договор + этап) не найден в справочнике.", "error")
+            return redirect(url_for("data_input", tab="bonuses"))
+
+        if not update_bonus_by_rid(
+            rid_int,
+            {
+                "contract_number": contract_number,
+                "etap_number": etap_number,
+                "worker_name": worker_name,
+                "task_date": task_date_db,
+                "hours_number": hours,
+                "bonus_sum": bonus_sum,
+            },
+        ):
+            flash("Не удалось обновить запись.", "error")
+            return redirect(url_for("data_input", tab="bonuses"))
+
+        flash("Запись обновлена.", "success")
         return redirect(url_for("data_input", tab="bonuses"))
 
     @app.post("/data_input/voyages/create")
@@ -931,7 +1059,7 @@ def create_app() -> Flask:
         if not can_use_data_input(current_role()):
             flash("Нет доступа.", "error")
             return redirect(url_for("projects"))
-        rid = (request.form.get("rid") or "").strip()
+        rid = (request.form.get("voyage_rid") or "").strip()
         if not rid.isdigit():
             flash("Выберите строку для удаления.", "error")
             return redirect(url_for("data_input", tab="voyages"))
@@ -941,6 +1069,64 @@ def create_app() -> Flask:
             return redirect(url_for("data_input", tab="voyages"))
         delete_voyage_by_rid(rid_int)
         flash("Запись удалена.", "success")
+        return redirect(url_for("data_input", tab="voyages"))
+
+    @app.post("/data_input/voyages/update")
+    def data_input_voyages_update():
+        redir = require_login()
+        if redir:
+            return redir
+        if not can_edit_data_input(current_role()):
+            flash("Редактирование доступно только Директору.", "error")
+            return redirect(url_for("projects"))
+
+        rid_raw = (request.form.get("rid") or "").strip()
+        if not rid_raw.isdigit():
+            flash("Запись для сохранения не указана.", "error")
+            return redirect(url_for("data_input", tab="voyages"))
+        rid_int = int(rid_raw)
+        if not voyage_row_exists(rid_int):
+            flash("Запись не найдена.", "error")
+            return redirect(url_for("data_input", tab="voyages"))
+
+        contract_number = (request.form.get("contract_number") or "").strip()
+        etap_number = (request.form.get("etap_number") or "").strip()
+        worker_name = (request.form.get("worker_name") or "").strip()
+        voyage_date_ui = (request.form.get("voyage_date") or "").strip()
+        voyage_cost_kind = (request.form.get("voyage_cost_kind") or "").strip()
+        cost_raw = (request.form.get("voyage_cost_sum") or "").strip()
+
+        if not contract_number or not etap_number or not worker_name or not voyage_date_ui:
+            flash("Заполните обязательные поля: Договор, Этап, Сотрудник, Дата.", "error")
+            return redirect(url_for("data_input", tab="voyages"))
+
+        try:
+            parse_date_from_ddmmyyyy(voyage_date_ui)
+            voyage_date_db = normalize_sqlite_timestamp_date(voyage_date_ui)
+            cost_sum = float(cost_raw.replace(",", ".")) if cost_raw else None
+        except Exception:
+            flash("Неверный формат данных (дата: dd.mm.YYYY, сумма: 123 или 123,5).", "error")
+            return redirect(url_for("data_input", tab="voyages"))
+
+        if not project_stage_exists(contract_number, etap_number):
+            flash("Проект (договор + этап) не найден в справочнике.", "error")
+            return redirect(url_for("data_input", tab="voyages"))
+
+        if not update_voyage_by_rid(
+            rid_int,
+            {
+                "contract_number": contract_number,
+                "etap_number": etap_number,
+                "worker_name": worker_name,
+                "voyage_date": voyage_date_db,
+                "voyage_cost_kind": voyage_cost_kind or None,
+                "voyage_cost_sum": cost_sum,
+            },
+        ):
+            flash("Не удалось обновить запись.", "error")
+            return redirect(url_for("data_input", tab="voyages"))
+
+        flash("Запись обновлена.", "success")
         return redirect(url_for("data_input", tab="voyages"))
 
     @app.post("/data_input/contracters/create")
@@ -1001,7 +1187,7 @@ def create_app() -> Flask:
         if not can_use_data_input(current_role()):
             flash("Нет доступа.", "error")
             return redirect(url_for("projects"))
-        rid = (request.form.get("rid") or "").strip()
+        rid = (request.form.get("contracter_rid") or "").strip()
         if not rid.isdigit():
             flash("Выберите строку для удаления.", "error")
             return redirect(url_for("data_input", tab="contracters"))
@@ -1011,6 +1197,69 @@ def create_app() -> Flask:
             return redirect(url_for("data_input", tab="contracters"))
         delete_contracter_by_rid(rid_int)
         flash("Запись удалена.", "success")
+        return redirect(url_for("data_input", tab="contracters"))
+
+    @app.post("/data_input/contracters/update")
+    def data_input_contracters_update():
+        redir = require_login()
+        if redir:
+            return redir
+        if not can_edit_data_input(current_role()):
+            flash("Редактирование доступно только Директору.", "error")
+            return redirect(url_for("projects"))
+
+        rid_raw = (request.form.get("rid") or "").strip()
+        if not rid_raw.isdigit():
+            flash("Запись для сохранения не указана.", "error")
+            return redirect(url_for("data_input", tab="contracters"))
+        rid_int = int(rid_raw)
+        if not contracter_row_exists(rid_int):
+            flash("Запись не найдена.", "error")
+            return redirect(url_for("data_input", tab="contracters"))
+
+        contract_number = (request.form.get("contract_number") or "").strip()
+        etap_number = (request.form.get("etap_number") or "").strip()
+        contracter_name = (request.form.get("contracter_name") or "").strip()
+        start_ui = (request.form.get("task_start_date") or "").strip()
+        end_ui = (request.form.get("task_end_date") or "").strip()
+        hours_raw = (request.form.get("contracters_hours_number") or "").strip()
+        cost_raw = (request.form.get("contracters_cost_sum") or "").strip()
+        comment = (request.form.get("comment") or "").strip()
+
+        if not contract_number or not etap_number or not contracter_name:
+            flash("Заполните обязательные поля: Договор, Этап, Подрядчик.", "error")
+            return redirect(url_for("data_input", tab="contracters"))
+
+        try:
+            start_db = normalize_sqlite_timestamp_date(start_ui) if start_ui else None
+            end_db = normalize_sqlite_timestamp_date(end_ui) if end_ui else None
+            hours = float(hours_raw.replace(",", ".")) if hours_raw else None
+            cost_sum = float(cost_raw.replace(",", ".")) if cost_raw else None
+        except Exception:
+            flash("Неверный формат данных (даты: dd.mm.YYYY, числа: 123 или 123,5).", "error")
+            return redirect(url_for("data_input", tab="contracters"))
+
+        if not project_stage_exists(contract_number, etap_number):
+            flash("Проект (договор + этап) не найден в справочнике.", "error")
+            return redirect(url_for("data_input", tab="contracters"))
+
+        if not update_contracter_by_rid(
+            rid_int,
+            {
+                "contract_number": contract_number,
+                "etap_number": etap_number,
+                "contracter_name": contracter_name,
+                "task_start_date": start_db,
+                "task_end_date": end_db,
+                "contracters_hours_number": hours,
+                "contracters_cost_sum": cost_sum,
+                "comment": comment or None,
+            },
+        ):
+            flash("Не удалось обновить запись.", "error")
+            return redirect(url_for("data_input", tab="contracters"))
+
+        flash("Запись обновлена.", "success")
         return redirect(url_for("data_input", tab="contracters"))
 
     @app.post("/project/<path:contract_number>/<etap_number>/upload_tasks")

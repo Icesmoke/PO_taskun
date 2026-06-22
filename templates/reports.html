@@ -6,11 +6,13 @@
   <div class="tabs is-boxed mb-4">
     <ul>
       <li class="{% if report_type == 'gant' %}is-active{% endif %}">
-        <a href="{{ url_for('reports', report_type='gant', date_start=date_start, date_end=date_end, contract_kind=contract_kind or '', project_chief=project_chief or '') }}">Диаграмма ганта</a>
+        <a href="{{ url_for('reports', report_type='gant', date_start=date_start, date_end=date_end, contract_kind=contract_kind or '', contract_number=contract_number or '', project_chief=project_chief or '') }}">Диаграмма ганта</a>
       </li>
+      {% if is_director %}
       <li class="{% if report_type == 'util' %}is-active{% endif %}">
         <a href="{{ url_for('reports', report_type='util', date_start=date_start, date_end=date_end, contract_kind=contract_kind or '', project_chief=project_chief or '') }}">Отчет по утилизации</a>
       </li>
+      {% endif %}
       <li class="{% if report_type == 'econ' %}is-active{% endif %}">
         <a href="{{ url_for('reports', report_type='econ', date_start=date_start, date_end=date_end, contract_kind=contract_kind or '', project_chief=project_chief or '') }}">Экономика проектов</a>
       </li>
@@ -56,6 +58,18 @@
           {% endif %}
         </div>
       </div>
+
+      {% if report_type == 'gant' %}
+        <div class="stack-mt">
+          <div class="label">Номер договора</div>
+          <select name="contract_number">
+            <option value="" {% if not contract_number %}selected{% endif %}>(все)</option>
+            {% for cn in contract_numbers|default([], true) %}
+              <option value="{{ cn|e }}" {% if contract_number == cn %}selected{% endif %}>{{ cn }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      {% endif %}
 
       <div class="actions actions--mt-sm">
         <button type="submit" class="button is-primary">Применить</button>
@@ -114,11 +128,16 @@
         <div class="muted">Нет данных для выбранного периода.</div>
       {% else %}
         {% for w in util_employees %}
-          {% set total_days = util_total_by_employee[w] %}
+          {% set days_on_projects = util_total_by_employee[w] %}
+          {% set util_rate = util_rate_by_employee.get(w, 0) %}
           <details class="util-emp" open="false">
             <summary>
               <span class="util-summary">{{ w }}</span>
-              : всего дней = {{ total_days }}
+              <span class="util-summary-stats">
+                — дней на проектах: {{ days_on_projects }},
+                рабочих дней в периоде: {{ util_period_workdays }},
+                утилизация: {{ '%.1f'|format(util_rate) }}%
+              </span>
             </summary>
             <div class="util-emp__body">
               <div class="table-wrap table-wrap--sticky">

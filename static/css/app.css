@@ -673,6 +673,26 @@ select:focus-visible {
   border-radius: var(--radius-sm);
 }
 
+.btn-sort.is-active {
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
+.th-sortable {
+  white-space: nowrap;
+}
+
+.th-sortable__label {
+  display: inline;
+  vertical-align: middle;
+}
+
+.th-sortable .btn-sort {
+  display: inline-block;
+  text-decoration: none;
+  color: inherit;
+}
+
 /* Ряды действий */
 .actions {
   display: flex;
@@ -978,6 +998,11 @@ html[data-theme="dark"] .gantt-table thead th.gantt-col-employee {
 
 .util-summary {
   font-weight: 700;
+}
+
+.util-summary-stats {
+  font-weight: 400;
+  color: var(--color-muted);
 }
 
 details.util-emp {

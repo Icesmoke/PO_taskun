@@ -79,6 +79,26 @@ def build_utilisation_model(
     return employees, days_by_worker_and_contract
 
 
+def employee_project_workdays(
+    intervals: Sequence[TaskInterval],
+    *,
+    calendar: WorkdayCalendar,
+) -> Dict[str, int]:
+    """Unique workdays per employee with any project work (union across contracts)."""
+    by_worker: Dict[str, List[Tuple[dt.date, dt.date]]] = {}
+    for it in intervals:
+        by_worker.setdefault(it.worker_name, []).append((it.start_date, it.end_date))
+
+    out: Dict[str, int] = {}
+    for worker, intvs in by_worker.items():
+        merged = merge_intervals(intvs)
+        day_set: Set[dt.date] = set()
+        for s, e in merged:
+            day_set |= calendar.workdays_inclusive(s, e)
+        out[worker] = len(day_set)
+    return out
+
+
 def colour_palette() -> List[str]:
     # A small palette; will be cycled by contract_number.
     return [

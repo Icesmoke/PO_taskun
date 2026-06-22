@@ -66,7 +66,10 @@
       <div class="flex-between">
         <h3 class="section-title">Записи</h3>
         <div class="actions actions--zero">
-          <button type="button" class="button is-primary" onclick="window.__openDlg('dlgBonus')">Создать</button>
+          <button type="button" class="button is-primary" onclick="window.__openCreateBonus && window.__openCreateBonus()">Создать</button>
+          {% if role == 'Директор' %}
+            <button type="button" class="button is-light" onclick="window.__openEditBonus && window.__openEditBonus()">Изменить</button>
+          {% endif %}
         </div>
       </div>
 
@@ -90,8 +93,17 @@
             </thead>
             <tbody>
               {% for r in bonuses_rows %}
-                <tr>
-                  <td><input type="radio" name="rid" value="{{ r.rid }}" /></td>
+                <tr
+                  class="data-input-row"
+                  data-rid="{{ r.rid }}"
+                  data-contract_number="{{ r.contract_number or '' }}"
+                  data-etap_number="{{ r.etap_number or '' }}"
+                  data-worker_name="{{ r.worker_name or '' }}"
+                  data-task_date="{{ r.task_date|format_date }}"
+                  data-hours_number="{{ r.hours_number if r.hours_number is not none else '' }}"
+                  data-bonus_sum="{{ r.bonus_sum if r.bonus_sum is not none else '' }}"
+                >
+                  <td><input type="radio" name="bonus_rid" value="{{ r.rid }}" /></td>
                   <td>{{ r.contract_number }}</td>
                   <td>{{ r.etap_number }}</td>
                   <td>{{ r.worker_name }}</td>
@@ -109,18 +121,19 @@
     </div>
 
     <dialog id="dlgBonus" class="dialog-wide">
-      <form method="post" action="{{ url_for('data_input_bonuses_create') }}">
+      <form id="formBonus" method="post" action="{{ url_for('data_input_bonuses_create') }}">
+        <input type="hidden" name="rid" id="bonusRid" value="" />
         <div class="flex-between">
-          <h3 class="dialog__title">Создание записи (Премии)</h3>
+          <h3 class="dialog__title" id="dlgBonusTitle">Создание записи (Премии)</h3>
           <button type="button" class="button is-light" onclick="window.__closeDlg('dlgBonus')">Закрыть</button>
         </div>
         <div class="grid-2 grid-2--mt">
-          <div class="field"><label>Договор *</label><input type="text" name="contract_number" required /></div>
-          <div class="field"><label>Этап *</label><input type="text" name="etap_number" required /></div>
-          <div class="field"><label>Сотрудник *</label><input type="text" name="worker_name" required /></div>
-          <div class="field"><label>Дата *</label><input type="text" name="task_date" placeholder="dd.mm.YYYY" required /></div>
-          <div class="field"><label>Количество часов</label><input type="text" name="hours_number" /></div>
-          <div class="field"><label>Сумма премии</label><input type="text" name="bonus_sum" /></div>
+          <div class="field"><label>Договор *</label><input type="text" name="contract_number" id="bonusContract" required /></div>
+          <div class="field"><label>Этап *</label><input type="text" name="etap_number" id="bonusEtap" required /></div>
+          <div class="field"><label>Сотрудник *</label><input type="text" name="worker_name" id="bonusWorker" required /></div>
+          <div class="field"><label>Дата *</label><input type="text" name="task_date" id="bonusDate" placeholder="dd.mm.YYYY" required /></div>
+          <div class="field"><label>Количество часов</label><input type="text" name="hours_number" id="bonusHours" /></div>
+          <div class="field"><label>Сумма премии</label><input type="text" name="bonus_sum" id="bonusSum" /></div>
         </div>
         <div class="actions actions--end">
           <button type="submit" class="button is-primary">Сохранить</button>
@@ -174,7 +187,10 @@
       <div class="flex-between">
         <h3 class="section-title">Записи</h3>
         <div class="actions actions--zero">
-          <button type="button" class="button is-primary" onclick="window.__openDlg('dlgVoyage')">Создать</button>
+          <button type="button" class="button is-primary" onclick="window.__openCreateVoyage && window.__openCreateVoyage()">Создать</button>
+          {% if role == 'Директор' %}
+            <button type="button" class="button is-light" onclick="window.__openEditVoyage && window.__openEditVoyage()">Изменить</button>
+          {% endif %}
         </div>
       </div>
 
@@ -198,8 +214,17 @@
             </thead>
             <tbody>
               {% for r in voyages_rows %}
-                <tr>
-                  <td><input type="radio" name="rid" value="{{ r.rid }}" /></td>
+                <tr
+                  class="data-input-row"
+                  data-rid="{{ r.rid }}"
+                  data-contract_number="{{ r.contract_number or '' }}"
+                  data-etap_number="{{ r.etap_number or '' }}"
+                  data-worker_name="{{ r.worker_name or '' }}"
+                  data-voyage_date="{{ r.voyage_date|format_date }}"
+                  data-voyage_cost_kind="{{ r.voyage_cost_kind or '' }}"
+                  data-voyage_cost_sum="{{ r.voyage_cost_sum if r.voyage_cost_sum is not none else '' }}"
+                >
+                  <td><input type="radio" name="voyage_rid" value="{{ r.rid }}" /></td>
                   <td>{{ r.contract_number }}</td>
                   <td>{{ r.etap_number }}</td>
                   <td>{{ r.worker_name }}</td>
@@ -217,26 +242,27 @@
     </div>
 
     <dialog id="dlgVoyage" class="dialog-wide">
-      <form method="post" action="{{ url_for('data_input_voyages_create') }}">
+      <form id="formVoyage" method="post" action="{{ url_for('data_input_voyages_create') }}">
+        <input type="hidden" name="rid" id="voyageRid" value="" />
         <div class="flex-between">
-          <h3 class="dialog__title">Создание записи (Командировки)</h3>
+          <h3 class="dialog__title" id="dlgVoyageTitle">Создание записи (Командировки)</h3>
           <button type="button" class="button is-light" onclick="window.__closeDlg('dlgVoyage')">Закрыть</button>
         </div>
         <div class="grid-2 grid-2--mt">
-          <div class="field"><label>Договор *</label><input type="text" name="contract_number" required /></div>
-          <div class="field"><label>Этап *</label><input type="text" name="etap_number" required /></div>
-          <div class="field"><label>Сотрудник *</label><input type="text" name="worker_name" required /></div>
-          <div class="field"><label>Дата командировки *</label><input type="text" name="voyage_date" placeholder="dd.mm.YYYY" required /></div>
+          <div class="field"><label>Договор *</label><input type="text" name="contract_number" id="voyageContract" required /></div>
+          <div class="field"><label>Этап *</label><input type="text" name="etap_number" id="voyageEtap" required /></div>
+          <div class="field"><label>Сотрудник *</label><input type="text" name="worker_name" id="voyageWorker" required /></div>
+          <div class="field"><label>Дата командировки *</label><input type="text" name="voyage_date" id="voyageDate" placeholder="dd.mm.YYYY" required /></div>
           <div class="field">
             <label>Вид затрат</label>
-            <select name="voyage_cost_kind">
+            <select name="voyage_cost_kind" id="voyageKind">
               <option value="">—</option>
               {% for k in voyage_kinds %}
                 <option value="{{ k }}">{{ k }}</option>
               {% endfor %}
             </select>
           </div>
-          <div class="field"><label>Сумма затрат</label><input type="text" name="voyage_cost_sum" /></div>
+          <div class="field"><label>Сумма затрат</label><input type="text" name="voyage_cost_sum" id="voyageSum" /></div>
         </div>
         <div class="actions actions--end">
           <button type="submit" class="button is-primary">Сохранить</button>
@@ -290,7 +316,10 @@
       <div class="flex-between">
         <h3 class="section-title">Записи</h3>
         <div class="actions actions--zero">
-          <button type="button" class="button is-primary" onclick="window.__openDlg('dlgContracter')">Создать</button>
+          <button type="button" class="button is-primary" onclick="window.__openCreateContracter && window.__openCreateContracter()">Создать</button>
+          {% if role == 'Директор' %}
+            <button type="button" class="button is-light" onclick="window.__openEditContracter && window.__openEditContracter()">Изменить</button>
+          {% endif %}
         </div>
       </div>
 
@@ -316,8 +345,19 @@
             </thead>
             <tbody>
               {% for r in contracters_rows %}
-                <tr>
-                  <td><input type="radio" name="rid" value="{{ r.rid }}" /></td>
+                <tr
+                  class="data-input-row"
+                  data-rid="{{ r.rid }}"
+                  data-contract_number="{{ r.contract_number or '' }}"
+                  data-etap_number="{{ r.etap_number or '' }}"
+                  data-contracter_name="{{ r.contracter_name or '' }}"
+                  data-task_start_date="{{ r.task_start_date|format_date }}"
+                  data-task_end_date="{{ r.task_end_date|format_date }}"
+                  data-contracters_hours_number="{{ r.contracters_hours_number if r.contracters_hours_number is not none else '' }}"
+                  data-contracters_cost_sum="{{ r.contracters_cost_sum if r.contracters_cost_sum is not none else '' }}"
+                  data-comment="{{ r.comment or '' }}"
+                >
+                  <td><input type="radio" name="contracter_rid" value="{{ r.rid }}" /></td>
                   <td>{{ r.contract_number }}</td>
                   <td>{{ r.etap_number }}</td>
                   <td>{{ r.contracter_name }}</td>
@@ -337,20 +377,21 @@
     </div>
 
     <dialog id="dlgContracter" class="dialog-wide">
-      <form method="post" action="{{ url_for('data_input_contracters_create') }}">
+      <form id="formContracter" method="post" action="{{ url_for('data_input_contracters_create') }}">
+        <input type="hidden" name="rid" id="contracterRid" value="" />
         <div class="flex-between">
-          <h3 class="dialog__title">Создание записи (Подрядчики)</h3>
+          <h3 class="dialog__title" id="dlgContracterTitle">Создание записи (Подрядчики)</h3>
           <button type="button" class="button is-light" onclick="window.__closeDlg('dlgContracter')">Закрыть</button>
         </div>
         <div class="grid-2 grid-2--mt">
-          <div class="field"><label>Договор *</label><input type="text" name="contract_number" required /></div>
-          <div class="field"><label>Этап *</label><input type="text" name="etap_number" required /></div>
-          <div class="field"><label>Подрядчик *</label><input type="text" name="contracter_name" required /></div>
-          <div class="field"><label>Количество часов</label><input type="text" name="contracters_hours_number" /></div>
-          <div class="field"><label>Дата начала работы</label><input type="text" name="task_start_date" placeholder="dd.mm.YYYY" /></div>
-          <div class="field"><label>Дата окончания работы</label><input type="text" name="task_end_date" placeholder="dd.mm.YYYY" /></div>
-          <div class="field"><label>Сумма затрат</label><input type="text" name="contracters_cost_sum" /></div>
-          <div class="field"><label>Комментарий</label><input type="text" name="comment" /></div>
+          <div class="field"><label>Договор *</label><input type="text" name="contract_number" id="contracterContract" required /></div>
+          <div class="field"><label>Этап *</label><input type="text" name="etap_number" id="contracterEtap" required /></div>
+          <div class="field"><label>Подрядчик *</label><input type="text" name="contracter_name" id="contracterName" required /></div>
+          <div class="field"><label>Количество часов</label><input type="text" name="contracters_hours_number" id="contracterHours" /></div>
+          <div class="field"><label>Дата начала работы</label><input type="text" name="task_start_date" id="contracterStart" placeholder="dd.mm.YYYY" /></div>
+          <div class="field"><label>Дата окончания работы</label><input type="text" name="task_end_date" id="contracterEnd" placeholder="dd.mm.YYYY" /></div>
+          <div class="field"><label>Сумма затрат</label><input type="text" name="contracters_cost_sum" id="contracterSum" /></div>
+          <div class="field"><label>Комментарий</label><input type="text" name="comment" id="contracterComment" /></div>
         </div>
         <div class="actions actions--end">
           <button type="submit" class="button is-primary">Сохранить</button>
@@ -369,6 +410,115 @@
         var dlg = document.getElementById(id);
         if (dlg && dlg.close) dlg.close();
       };
+
+      function selectedRow(radioName) {
+        var sel = document.querySelector('input[name="' + radioName + '"]:checked');
+        if (!sel) return null;
+        return sel.closest("tr.data-input-row");
+      }
+
+      function setupCrud(opts) {
+        var form = document.getElementById(opts.formId);
+        if (!form) return;
+
+        window[opts.openCreateFn] = function () {
+          form.action = opts.createUrl;
+          document.getElementById(opts.ridId).value = "";
+          document.getElementById(opts.titleId).textContent = opts.createTitle;
+          opts.fields.forEach(function (f) {
+            var el = document.getElementById(f.id);
+            if (el) el.value = f.defaultValue || "";
+          });
+          window.__openDlg(opts.dialogId);
+        };
+
+        window[opts.openEditFn] = function () {
+          var tr = selectedRow(opts.radioName);
+          if (!tr) {
+            alert(opts.selectMessage);
+            return;
+          }
+          form.action = opts.updateUrl;
+          document.getElementById(opts.ridId).value = tr.getAttribute("data-rid") || "";
+          document.getElementById(opts.titleId).textContent = opts.editTitle;
+          opts.fields.forEach(function (f) {
+            var el = document.getElementById(f.id);
+            if (el) el.value = tr.getAttribute(f.dataAttr) || "";
+          });
+          window.__openDlg(opts.dialogId);
+        };
+      }
+
+      setupCrud({
+        formId: "formBonus",
+        dialogId: "dlgBonus",
+        ridId: "bonusRid",
+        titleId: "dlgBonusTitle",
+        radioName: "bonus_rid",
+        createUrl: "{{ url_for('data_input_bonuses_create') }}",
+        updateUrl: "{{ url_for('data_input_bonuses_update') }}",
+        openCreateFn: "__openCreateBonus",
+        openEditFn: "__openEditBonus",
+        createTitle: "Создание записи (Премии)",
+        editTitle: "Редактирование записи (Премии)",
+        selectMessage: "Выберите строку для редактирования (радиокнопка в колонке «Выбор»).",
+        fields: [
+          { id: "bonusContract", dataAttr: "data-contract_number" },
+          { id: "bonusEtap", dataAttr: "data-etap_number" },
+          { id: "bonusWorker", dataAttr: "data-worker_name" },
+          { id: "bonusDate", dataAttr: "data-task_date" },
+          { id: "bonusHours", dataAttr: "data-hours_number" },
+          { id: "bonusSum", dataAttr: "data-bonus_sum" },
+        ],
+      });
+
+      setupCrud({
+        formId: "formVoyage",
+        dialogId: "dlgVoyage",
+        ridId: "voyageRid",
+        titleId: "dlgVoyageTitle",
+        radioName: "voyage_rid",
+        createUrl: "{{ url_for('data_input_voyages_create') }}",
+        updateUrl: "{{ url_for('data_input_voyages_update') }}",
+        openCreateFn: "__openCreateVoyage",
+        openEditFn: "__openEditVoyage",
+        createTitle: "Создание записи (Командировки)",
+        editTitle: "Редактирование записи (Командировки)",
+        selectMessage: "Выберите строку для редактирования (радиокнопка в колонке «Выбор»).",
+        fields: [
+          { id: "voyageContract", dataAttr: "data-contract_number" },
+          { id: "voyageEtap", dataAttr: "data-etap_number" },
+          { id: "voyageWorker", dataAttr: "data-worker_name" },
+          { id: "voyageDate", dataAttr: "data-voyage_date" },
+          { id: "voyageKind", dataAttr: "data-voyage_cost_kind" },
+          { id: "voyageSum", dataAttr: "data-voyage_cost_sum" },
+        ],
+      });
+
+      setupCrud({
+        formId: "formContracter",
+        dialogId: "dlgContracter",
+        ridId: "contracterRid",
+        titleId: "dlgContracterTitle",
+        radioName: "contracter_rid",
+        createUrl: "{{ url_for('data_input_contracters_create') }}",
+        updateUrl: "{{ url_for('data_input_contracters_update') }}",
+        openCreateFn: "__openCreateContracter",
+        openEditFn: "__openEditContracter",
+        createTitle: "Создание записи (Подрядчики)",
+        editTitle: "Редактирование записи (Подрядчики)",
+        selectMessage: "Выберите строку для редактирования (радиокнопка в колонке «Выбор»).",
+        fields: [
+          { id: "contracterContract", dataAttr: "data-contract_number" },
+          { id: "contracterEtap", dataAttr: "data-etap_number" },
+          { id: "contracterName", dataAttr: "data-contracter_name" },
+          { id: "contracterHours", dataAttr: "data-contracters_hours_number" },
+          { id: "contracterStart", dataAttr: "data-task_start_date" },
+          { id: "contracterEnd", dataAttr: "data-task_end_date" },
+          { id: "contracterSum", dataAttr: "data-contracters_cost_sum" },
+          { id: "contracterComment", dataAttr: "data-comment" },
+        ],
+      });
     })();
   </script>
 {% endblock %}
