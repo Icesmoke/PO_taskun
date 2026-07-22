@@ -20,24 +20,34 @@
   </div>
 
   <div class="box po-mb">
-    <form method="get" action="{{ url_for('reports') }}">
+    <form method="get" action="{{ url_for('reports') }}" id="reports-filter-form">
       <input type="hidden" name="report_type" value="{{ report_type }}" />
 
       <div class="grid-2">
         <div>
-          <div class="label">Дата начала</div>
-          <input type="text" name="date_start" value="{{ date_start }}" placeholder="dd.mm.YYYY" />
+          <label class="label" for="report-date-start">Дата начала</label>
+          <input id="report-date-start" type="text" class="js-date" name="date_start" value="{{ date_start }}" placeholder="dd.mm.YYYY" />
         </div>
         <div>
-          <div class="label">Дата окончания</div>
-          <input type="text" name="date_end" value="{{ date_end }}" placeholder="dd.mm.YYYY" />
+          <label class="label" for="report-date-end">Дата окончания</label>
+          <input id="report-date-end" type="text" class="js-date" name="date_end" value="{{ date_end }}" placeholder="dd.mm.YYYY" />
         </div>
       </div>
 
+      {% if report_type == 'gant' %}
+        <div class="period-presets" role="group" aria-label="Быстрый период для Ганта">
+          <button type="button" class="button is-light is-small js-period-preset" data-days="7">7 дней</button>
+          <button type="button" class="button is-light is-small js-period-preset" data-days="14">14 дней</button>
+          <button type="button" class="button is-light is-small js-period-preset" data-days="31">31 день</button>
+          <button type="button" class="button is-light is-small js-period-preset" data-preset="month">Текущий месяц</button>
+        </div>
+        <div class="text-hint stack-mt">Для Ганта максимум 31 день. Пресеты задают период от сегодня назад.</div>
+      {% endif %}
+
       <div class="grid-2 grid-2--mt">
         <div>
-          <div class="label">Вид договора</div>
-          <select name="contract_kind">
+          <label class="label" for="report-contract-kind">Вид договора</label>
+          <select id="report-contract-kind" name="contract_kind">
             <option value="" {% if not contract_kind %}selected{% endif %}>(все)</option>
             {% for k in contract_kinds %}
               <option value="{{ k }}" {% if contract_kind == k %}selected{% endif %}>{{ k }}</option>
@@ -45,11 +55,11 @@
           </select>
         </div>
         <div>
-          <div class="label">Руководитель проекта</div>
+          <label class="label" for="report-project-chief">Руководитель проекта</label>
           {% if is_chief %}
-            <input type="text" value="{{ project_chief }}" disabled />
+            <input id="report-project-chief" type="text" value="{{ project_chief }}" disabled />
           {% else %}
-            <select name="project_chief">
+            <select id="report-project-chief" name="project_chief">
               <option value="" {% if not project_chief %}selected{% endif %}>(все)</option>
               {% for ch in project_chiefs %}
                 <option value="{{ ch }}" {% if project_chief == ch %}selected{% endif %}>{{ ch }}</option>
@@ -61,8 +71,8 @@
 
       {% if report_type == 'gant' %}
         <div class="stack-mt">
-          <div class="label">Номер договора</div>
-          <select name="contract_number">
+          <label class="label" for="report-contract-number">Номер договора</label>
+          <select id="report-contract-number" name="contract_number">
             <option value="" {% if not contract_number %}selected{% endif %}>(все)</option>
             {% for cn in contract_numbers|default([], true) %}
               <option value="{{ cn|e }}" {% if contract_number == cn %}selected{% endif %}>{{ cn }}</option>
@@ -83,7 +93,7 @@
       {% if gant_employees|length == 0 %}
         <div class="muted">Нет данных для выбранного периода.</div>
       {% else %}
-        <p class="table-scroll-hint table-scroll-hint--mobile-only">Таблицу можно прокручивать по горизонтали и вертикали.</p>
+        <p class="table-scroll-hint">Календарь Ганта прокручивается по горизонтали; колонка «Сотрудник» закреплена. Для узкого периода используйте пресеты выше.</p>
         <div class="gantt-wrap">
           <table class="gantt-table">
             <colgroup>
@@ -110,7 +120,7 @@
                     <td>
                       {% set contracts = gant_cells[w][d] %}
                       {% for c in contracts %}
-                        <span class="pill" style="background: {{ gant_colors[c] }};">{{ c }}</span>
+                        <span class="pill" style="background: {{ gant_colors[c] }}; color: {{ gant_colors[c]|contrast_text }};">{{ c }}</span>
                       {% endfor %}
                     </td>
                   {% endfor %}
@@ -246,5 +256,48 @@
         </div>
       {% endif %}
     </div>
+  {% endif %}
+
+  {% if report_type == 'gant' %}
+  <script>
+    (function () {
+      function pad(n) { return n < 10 ? '0' + n : String(n); }
+      function fmt(d) {
+        return pad(d.getDate()) + '.' + pad(d.getMonth() + 1) + '.' + d.getFullYear();
+      }
+      var startEl = document.getElementById('report-date-start');
+      var endEl = document.getElementById('report-date-end');
+      var form = document.getElementById('reports-filter-form');
+      if (!startEl || !endEl) return;
+
+      document.querySelectorAll('.js-period-preset').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          var end = new Date();
+          end.setHours(0, 0, 0, 0);
+          var start = new Date(end);
+          var preset = btn.getAttribute('data-preset');
+          if (preset === 'month') {
+            start = new Date(end.getFullYear(), end.getMonth(), 1);
+          } else {
+            var days = parseInt(btn.getAttribute('data-days') || '14', 10);
+            if (!days || days < 1) days = 14;
+            if (days > 31) days = 31;
+            start.setDate(end.getDate() - (days - 1));
+          }
+          if ((end - start) / 86400000 > 31) {
+            start = new Date(end);
+            start.setDate(end.getDate() - 30);
+          }
+          startEl.value = fmt(start);
+          endEl.value = fmt(end);
+          if (window.setDateInput) {
+            window.setDateInput(startEl, fmt(start));
+            window.setDateInput(endEl, fmt(end));
+          }
+          if (form) form.submit();
+        });
+      });
+    })();
+  </script>
   {% endif %}
 {% endblock %}

@@ -36,6 +36,10 @@
       rel="stylesheet"
       href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.default.min.css"
     />
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.css"
+    />
     {% endif %}
   </head>
   <body>
@@ -197,7 +201,10 @@
         })();
       </script>
       <script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
+      <script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.js"></script>
+      <script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/l10n/ru.js"></script>
       <script src="{{ url_for('static', filename='js/filter-multiselect.js') }}"></script>
+      <script src="{{ url_for('static', filename='js/date-picker.js') }}"></script>
     {% else %}
         </div>
       </div>

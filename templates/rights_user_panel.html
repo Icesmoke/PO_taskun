@@ -7,7 +7,8 @@
 
     <div class="actions actions--mb">
       <button type="button" class="button is-primary" onclick="openCreateModal()">Создать пользователя</button>
-      <form method="post" action="{{ url_for('disable_user') }}" id="disableForm">
+      <form method="post" action="{{ url_for('disable_user') }}" id="disableForm"
+            onsubmit="return confirm('Отключить выбранного пользователя? Действие можно отменить только через базу данных.');">
         <input type="hidden" id="selectedWorkerId" name="workers_id" value="" />
         <button type="submit" class="button is-danger is-light">Удалить пользователя</button>
       </form>
@@ -42,10 +43,13 @@
     </div>
   </div>
 
-  <div id="createUserModal" class="modal">
-    <div class="modal-content box">
-      <h3 class="section-title">Создание нового пользователя</h3>
-      <form method="post" action="{{ url_for('create_user') }}">
+  <dialog id="createUserModal" class="dialog-wide dialog-narrow">
+    <div class="flex-between">
+      <h3 class="dialog__title">Создание нового пользователя</h3>
+      <button type="button" class="button is-light" onclick="closeCreateModal()">Закрыть</button>
+    </div>
+    <div>
+      <form method="post" action="{{ url_for('create_user') }}" class="stack-mt">
         <div class="field">
           <label>Полное имя пользователя</label>
           <input type="text" name="full_name" required />
@@ -63,29 +67,26 @@
             {% endfor %}
           </select>
         </div>
-        <div class="actions actions--zero">
-          <button type="submit" class="button is-primary">Сохранить</button>
+        <div class="actions actions--end">
           <button type="button" class="button is-light" onclick="closeCreateModal()">Отмена</button>
+          <button type="submit" class="button is-primary">Сохранить</button>
         </div>
       </form>
     </div>
-  </div>
+  </dialog>
 
   <script>
-    function openCreateModal() {
-      document.getElementById("createUserModal").style.display = "block";
-    }
-    function closeCreateModal() {
-      document.getElementById("createUserModal").style.display = "none";
-    }
-    function selectWorker(id) {
-      document.getElementById("selectedWorkerId").value = id;
-    }
-    window.onclick = function(event) {
+    (function () {
       var modal = document.getElementById("createUserModal");
-      if (event.target === modal) {
-        closeCreateModal();
-      }
-    }
+      window.openCreateModal = function () {
+        if (modal && modal.showModal) modal.showModal();
+      };
+      window.closeCreateModal = function () {
+        if (modal && modal.close) modal.close();
+      };
+      window.selectWorker = function (id) {
+        document.getElementById("selectedWorkerId").value = id;
+      };
+    })();
   </script>
 {% endblock %}

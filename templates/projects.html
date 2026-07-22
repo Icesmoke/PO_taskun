@@ -1,216 +1,283 @@
 {% extends "base.html" %}
 
-{% macro sort_btn(column, label) %}
-  <th class="th-sortable">
-    <span class="th-sortable__label">{{ label }}</span>
-    <a
-      class="btn-sort{% if sort_by == column %} is-active{% endif %}"
-      href="{{ projects_sort_url(column) }}"
-      title="Сортировать по «{{ label }}»{% if sort_by == column %} ({{ 'по возрастанию' if sort_dir == 'asc' else 'по убыванию' }}){% endif %}"
-      aria-label="Сортировать по {{ label }}"
-    >{% if sort_by == column %}{% if sort_dir == 'asc' %}↑{% else %}↓{% endif %}{% else %}⇅{% endif %}</a>
-  </th>
-{% endmacro %}
+{% macro project_status_class(status) -%}
+{%- set s = (status or '')|lower -%}
+{%- if 'закрыт' in s or 'выполн' in s or 'заверш' in s or 'акт' in s -%}task-status--done
+{%- elif 'работ' in s or 'процесс' in s or 'исполн' in s -%}task-status--progress
+{%- endif -%}
+{%- endmacro %}
+
+{% macro project_period(p) -%}
+{%- set a = p.plan_start_date|format_date -%}
+{%- set b = p.plan_end_date|format_date -%}
+{%- if a and b -%}{{ a }} — {{ b }}
+{%- elif a -%}с {{ a }}
+{%- elif b -%}до {{ b }}
+{%- else -%}даты не заданы
+{%- endif -%}
+{%- endmacro %}
 
 {% block content %}
   <div class="box po-mb">
-    <h2 class="page-title">Панель проектов</h2>
-
-    <form method="get" action="{{ url_for('projects') }}">
-      <div class="grid-2">
-        <div class="filter-field">
-          <div class="label">Вид договора</div>
-          <select
-            multiple
-            name="contract_kind"
-            class="js-filter-multiselect"
-            data-placeholder="Виды договоров"
-          >
-            {% for k in all_kinds %}
-              <option value="{{ k }}" {% if k in contract_kinds %}selected{% endif %}>{{ k }}</option>
-            {% endfor %}
-          </select>
-          <div class="text-hint">Поиск в списке, несколько значений; снять — крестик на теге.</div>
-        </div>
-        <div class="filter-field">
-          <div class="label">Организация исполнитель</div>
-          <select
-            multiple
-            name="executant_name"
-            class="js-filter-multiselect"
-            data-placeholder="Исполнители"
-          >
-            {% for ex in all_executants %}
-              <option value="{{ ex }}" {% if ex in executant_names %}selected{% endif %}>{{ ex }}</option>
-            {% endfor %}
-          </select>
-          <div class="text-hint">Поиск в списке, несколько значений; снять — крестик на теге.</div>
-        </div>
-      </div>
-
-      <div class="grid-2 grid-2--mt">
-        <div>
-          <div class="label">Период (dd.mm.YYYY)</div>
-          <div class="field field--tight">
-            <label>Начало</label>
-            <input type="text" name="period_start" value="{{ period_start }}" placeholder="dd.mm.YYYY" />
-          </div>
-          <div class="field">
-            <label>Окончание</label>
-            <input type="text" name="period_end" value="{{ period_end }}" placeholder="dd.mm.YYYY" />
-          </div>
-          <div class="text-hint">
-            Дата начала и окончания проекта должна попадать внутрь диапазона.
-          </div>
-        </div>
-        <div class="filter-field">
-          <div class="label">Статус проекта</div>
-          <select
-            multiple
-            name="project_status"
-            class="js-filter-multiselect"
-            data-placeholder="Статусы"
-          >
-            {% for s in all_statuses %}
-              <option value="{{ s }}" {% if s in statuses %}selected{% endif %}>{{ s }}</option>
-            {% endfor %}
-          </select>
-          <div class="text-hint">Поиск в списке, несколько значений; снять — крестик на теге.</div>
-        </div>
-      </div>
-
+    <div class="flex-between">
+      <h2 class="page-title">Панель проектов</h2>
       {% if role == 'Директор' %}
-        <div class="stack-mt filter-field">
-          <div class="label">Руководитель проектов</div>
-          <select
-            multiple
-            name="project_chief"
-            class="js-filter-multiselect"
-            data-placeholder="Руководители"
-          >
-            {% for ch in all_project_chiefs %}
-              <option value="{{ ch }}" {% if ch in project_chiefs %}selected{% endif %}>{{ ch }}</option>
-            {% endfor %}
-          </select>
-          <div class="text-hint">Поиск в списке, несколько значений; снять — крестик на теге.</div>
-        </div>
+        <button type="button" class="button is-primary" onclick="window.__openCreateProjectDialog && window.__openCreateProjectDialog()">Создать проект</button>
       {% endif %}
+    </div>
 
+    <form method="get" action="{{ url_for('projects') }}" id="projects-filter-form">
       {% if sort_by %}
         <input type="hidden" name="sort_by" value="{{ sort_by }}" />
         <input type="hidden" name="sort_dir" value="{{ sort_dir }}" />
       {% endif %}
 
-      <div class="actions">
-        <button type="submit" class="button is-primary">Применить фильтры</button>
-        <a class="button is-light" href="{{ url_for('projects') }}">Сбросить</a>
-      </div>
+      <details class="filter-panel" {% if filters_active %}open{% endif %}>
+        <summary class="filter-panel__summary">
+          Фильтры{% if filters_active %} <span class="filter-panel__badge">активны</span>{% endif %}
+        </summary>
+        <div class="filter-panel__body">
+          <div class="grid-2">
+            <div class="filter-field">
+              <label class="label" for="filter-contract-kind">Вид договора</label>
+              <select
+                id="filter-contract-kind"
+                multiple
+                name="contract_kind"
+                class="js-filter-multiselect"
+                data-placeholder="Виды договоров"
+              >
+                {% for k in all_kinds %}
+                  <option value="{{ k }}" {% if k in contract_kinds %}selected{% endif %}>{{ k }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="filter-field">
+              <label class="label" for="filter-executant">Организация исполнитель</label>
+              <select
+                id="filter-executant"
+                multiple
+                name="executant_name"
+                class="js-filter-multiselect"
+                data-placeholder="Исполнители"
+              >
+                {% for ex in all_executants %}
+                  <option value="{{ ex }}" {% if ex in executant_names %}selected{% endif %}>{{ ex }}</option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+
+          <div class="grid-2 grid-2--mt">
+            <div>
+              <div class="label">Период плана</div>
+              <div class="field field--tight">
+                <label for="filter-period-start">Начало</label>
+                <input id="filter-period-start" type="text" class="js-date" name="period_start" value="{{ period_start }}" placeholder="dd.mm.YYYY" />
+              </div>
+              <div class="field">
+                <label for="filter-period-end">Окончание</label>
+                <input id="filter-period-end" type="text" class="js-date" name="period_end" value="{{ period_end }}" placeholder="dd.mm.YYYY" />
+              </div>
+              <div class="text-hint">План начала и окончания проекта должен попадать в диапазон.</div>
+            </div>
+            <div class="filter-field">
+              <label class="label" for="filter-status">Статус проекта</label>
+              <select
+                id="filter-status"
+                multiple
+                name="project_status"
+                class="js-filter-multiselect"
+                data-placeholder="Статусы"
+              >
+                {% for s in all_statuses %}
+                  <option value="{{ s }}" {% if s in statuses %}selected{% endif %}>{{ s }}</option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+
+          {% if role == 'Директор' %}
+            <div class="stack-mt filter-field">
+              <label class="label" for="filter-chief">Руководитель проектов</label>
+              <select
+                id="filter-chief"
+                multiple
+                name="project_chief"
+                class="js-filter-multiselect"
+                data-placeholder="Руководители"
+              >
+                {% for ch in all_project_chiefs %}
+                  <option value="{{ ch }}" {% if ch in project_chiefs %}selected{% endif %}>{{ ch }}</option>
+                {% endfor %}
+              </select>
+            </div>
+          {% endif %}
+
+          <div class="actions">
+            <button type="submit" class="button is-primary">Применить</button>
+            <a class="button is-light" href="{{ url_for('projects') }}">Сбросить</a>
+          </div>
+        </div>
+      </details>
     </form>
+
+    {% if filters_active %}
+      <div class="filter-chips" aria-label="Активные фильтры">
+        {% for k in contract_kinds %}
+          <a class="filter-chip" href="{{ projects_filter_without('contract_kind', k) }}">Вид: {{ k }} <span aria-hidden="true">×</span></a>
+        {% endfor %}
+        {% for ex in executant_names %}
+          <a class="filter-chip" href="{{ projects_filter_without('executant_name', ex) }}">Исп.: {{ ex }} <span aria-hidden="true">×</span></a>
+        {% endfor %}
+        {% for s in statuses %}
+          <a class="filter-chip" href="{{ projects_filter_without('project_status', s) }}">Статус: {{ s }} <span aria-hidden="true">×</span></a>
+        {% endfor %}
+        {% for ch in project_chiefs %}
+          <a class="filter-chip" href="{{ projects_filter_without('project_chief', ch) }}">РП: {{ ch }} <span aria-hidden="true">×</span></a>
+        {% endfor %}
+        {% if period_start or period_end %}
+          <a class="filter-chip" href="{{ projects_clear_period() }}">
+            Период: {{ period_start or '…' }} — {{ period_end or '…' }} <span aria-hidden="true">×</span>
+          </a>
+        {% endif %}
+        <a class="filter-chip filter-chip--clear" href="{{ url_for('projects') }}">Сбросить все</a>
+      </div>
+    {% endif %}
   </div>
 
   <div class="box">
-    <div class="flex-between">
+    <div class="flex-between list-toolbar">
       <h2 class="page-title">Список проектов</h2>
-      {% if role == 'Директор' %}
-        <button type="button" class="button is-primary" onclick="window.__openCreateProjectDialog && window.__openCreateProjectDialog()">Создать проект</button>
-      {% endif %}
+      <div class="list-toolbar__sort">
+        <label class="list-toolbar__sort-label" for="projects-sort">Сортировка</label>
+        <select id="projects-sort" class="list-toolbar__sort-select">
+          <option value="" {% if not sort_by %}selected{% endif %}>По умолчанию</option>
+          <option value="contract_number" {% if sort_by == 'contract_number' %}selected{% endif %}>Номер договора</option>
+          {% if role == 'Директор' %}
+            <option value="project_chief" {% if sort_by == 'project_chief' %}selected{% endif %}>Руководитель</option>
+          {% endif %}
+          <option value="client_name" {% if sort_by == 'client_name' %}selected{% endif %}>Заказчик</option>
+          <option value="executant_name" {% if sort_by == 'executant_name' %}selected{% endif %}>Исполнитель</option>
+          <option value="plan_start_date" {% if sort_by == 'plan_start_date' %}selected{% endif %}>Дата начала</option>
+          <option value="plan_end_date" {% if sort_by == 'plan_end_date' %}selected{% endif %}>Дата окончания</option>
+          <option value="project_status" {% if sort_by == 'project_status' %}selected{% endif %}>Статус</option>
+        </select>
+        {% if sort_by %}
+          <a class="button is-small is-light" href="{{ projects_sort_url(sort_by) }}" title="Сменить направление">
+            {% if sort_dir == 'asc' %}↑{% else %}↓{% endif %}
+          </a>
+        {% endif %}
+      </div>
     </div>
-    <p class="table-scroll-hint table-scroll-hint--mobile-only">Таблицу можно прокручивать по горизонтали.</p>
-    <div class="table-wrap table-wrap--sticky">
-    <table class="table is-striped is-hoverable is-fullwidth">
-      <thead>
-        <tr>
-          {{ sort_btn('contract_number', 'Номер договора') }}
-          <th>Этап</th>
-          {% if role == 'Директор' %}
-            {{ sort_btn('project_chief', 'Руководитель проекта') }}
-          {% endif %}
-          <th>Вид договора</th>
-          {{ sort_btn('client_name', 'Заказчик') }}
-          {{ sort_btn('executant_name', 'Исполнитель') }}
-          {{ sort_btn('plan_start_date', 'План. дата начала') }}
-          {{ sort_btn('plan_end_date', 'План. дата окончания') }}
-          {{ sort_btn('project_status', 'Статус') }}
-          {% if role == 'Директор' %}
-            <th>Действия</th>
-            <th>Дата акта</th>
-          {% endif %}
-        </tr>
-      </thead>
-      <tbody>
+
+    {% if projects %}
+      <div class="project-list">
         {% for p in projects %}
-          {% if role == 'Директор' %}
-            <tr
-              class="clickable-row"
-              data-card-href="{{ url_for('project_card', contract_number=p.contract_number, etap_number=p.etap_number) }}"
-            >
-              <form method="post" action="{{ url_for('update_project') }}">
-                <td>
-                  {{ p.contract_number }}
-                  <input type="hidden" name="contract_number" value="{{ p.contract_number }}" />
-                </td>
-                <td>
-                  {{ p.etap_number }}
-                  <input type="hidden" name="etap_number" value="{{ p.etap_number }}" />
-                </td>
-                <td>{{ p.project_chief }}</td>
-                <td>{{ p.contract_kind }}</td>
-                <td>{{ p.client_name }}</td>
-                <td>{{ p.executant_name }}</td>
-                <td>
-                  <input type="text" name="plan_start_date" value="{{ p.plan_start_date|format_date }}" placeholder="dd.mm.YYYY" />
-                </td>
-                <td>
-                  <input type="text" name="plan_end_date" value="{{ p.plan_end_date|format_date }}" placeholder="dd.mm.YYYY" />
-                </td>
-                <td>
-                  <select name="project_status">
-                    {% for s in status_catalog %}
-                      <option value="{{ s }}" {% if s == p.project_status %}selected{% endif %}>{{ s }}</option>
-                    {% endfor %}
-                  </select>
-                </td>
-                <td>
-                  <div class="actions actions--zero">
-                    <a class="button is-small is-link" href="{{ url_for('project_card', contract_number=p.contract_number, etap_number=p.etap_number) }}">Открыть</a>
-                    <button type="submit" class="button is-primary is-small">Сохранить</button>
-                  </div>
-                </td>
-                <td>
-                  <input type="text" name="act_date" value="{{ p.act_date|format_date }}" placeholder="dd.mm.YYYY" />
-                </td>
-              </form>
-            </tr>
-          {% else %}
-            <tr class="clickable-row" onclick="window.location.href='{{ url_for('project_card', contract_number=p.contract_number, etap_number=p.etap_number) }}'">
-              <td>{{ p.contract_number }}</td>
-              <td>{{ p.etap_number }}</td>
-            <td>{{ p.contract_kind }}</td>
-            <td>{{ p.client_name }}</td>
-            <td>{{ p.executant_name }}</td>
-            <td>{{ p.plan_start_date|format_date }}</td>
-            <td>{{ p.plan_end_date|format_date }}</td>
-            <td>{{ p.project_status }}</td>
-            </tr>
-          {% endif %}
-        {% else %}
-          <tr>
-            <td colspan="{{ 8 + (2 if role == 'Директор' else 0) + (1 if role == 'Директор' else 0) }}" class="muted">Нет данных по фильтрам.</td>
-          </tr>
+          {% set card_url = url_for('project_card', contract_number=p.contract_number, etap_number=p.etap_number) %}
+          <article class="project-row">
+            <a class="project-row__link" href="{{ card_url }}">
+              <div class="project-row__head">
+                <div class="project-row__id">
+                  <span class="project-row__contract">{{ p.contract_number }}</span>
+                  <span class="project-row__etap">этап {{ p.etap_number }}</span>
+                  {% if p.contract_kind %}
+                    <span class="project-row__kind">{{ p.contract_kind }}</span>
+                  {% endif %}
+                </div>
+                <div class="project-row__right">
+                  <span class="task-status {{ project_status_class(p.project_status) }}">{{ p.project_status or '—' }}</span>
+                  <span class="project-row__dates">{{ project_period(p) }}</span>
+                </div>
+              </div>
+              <div class="project-row__meta">
+                {% if p.client_name %}
+                  <span>Заказчик: {{ p.client_name }}</span>
+                {% endif %}
+                {% if p.executant_name %}
+                  <span class="project-row__meta-sep">·</span>
+                  <span>Исп.: {{ p.executant_name }}</span>
+                {% endif %}
+                {% if role == 'Директор' and p.project_chief %}
+                  <span class="project-row__meta-sep">·</span>
+                  <span>РП: {{ p.project_chief }}</span>
+                {% endif %}
+              </div>
+            </a>
+            {% if role == 'Директор' %}
+              <div class="project-row__actions">
+                <button
+                  type="button"
+                  class="button is-small is-light js-edit-project"
+                  data-contract="{{ p.contract_number }}"
+                  data-etap="{{ p.etap_number }}"
+                  data-plan-start="{{ p.plan_start_date|format_date }}"
+                  data-plan-end="{{ p.plan_end_date|format_date }}"
+                  data-act-date="{{ p.act_date|format_date }}"
+                  data-status="{{ p.project_status or '' }}"
+                >Изменить</button>
+              </div>
+            {% endif %}
+          </article>
         {% endfor %}
-      </tbody>
-    </table>
-    </div>
+      </div>
+    {% else %}
+      <div class="task-empty">
+        Нет проектов по выбранным фильтрам.
+        {% if role == 'Директор' %}
+          <div class="stack-mt">
+            <button type="button" class="button is-primary" onclick="window.__openCreateProjectDialog && window.__openCreateProjectDialog()">Создать проект</button>
+          </div>
+        {% endif %}
+      </div>
+    {% endif %}
   </div>
 
   {% if role == 'Директор' %}
+    <dialog id="editProjectDialog" class="dialog-wide">
+      <form method="post" action="{{ url_for('update_project') }}" id="editProjectForm">
+        <input type="hidden" name="contract_number" id="editContract" />
+        <input type="hidden" name="etap_number" id="editEtap" />
+        <div class="flex-between">
+          <h3 class="dialog__title">Изменение проекта</h3>
+          <button type="button" class="button is-light" id="editProjectClose">Закрыть</button>
+        </div>
+        <p class="muted form-intro" id="editProjectSubtitle"></p>
+        <div class="grid-2 grid-2--mt">
+          <div class="field">
+            <label for="editPlanStart">План. дата начала</label>
+            <input id="editPlanStart" type="text" class="js-date" name="plan_start_date" placeholder="dd.mm.YYYY" />
+          </div>
+          <div class="field">
+            <label for="editPlanEnd">План. дата окончания</label>
+            <input id="editPlanEnd" type="text" class="js-date" name="plan_end_date" placeholder="dd.mm.YYYY" />
+          </div>
+          <div class="field">
+            <label for="editStatus">Статус проекта</label>
+            <select id="editStatus" name="project_status">
+              {% for s in status_catalog %}
+                <option value="{{ s }}">{{ s }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="field">
+            <label for="editActDate">Дата акта</label>
+            <input id="editActDate" type="text" class="js-date" name="act_date" placeholder="dd.mm.YYYY" />
+          </div>
+        </div>
+        <div class="actions actions--end">
+          <button type="submit" class="button is-primary">Сохранить</button>
+        </div>
+      </form>
+    </dialog>
+
     <dialog id="createProjectDialog" class="dialog-wide">
       <form method="post" action="{{ url_for('create_project_post') }}">
         <div class="flex-between">
           <h3 class="dialog__title">Создание проекта</h3>
           <button type="button" class="button is-light" onclick="window.__closeCreateProjectDialog && window.__closeCreateProjectDialog()">Закрыть</button>
         </div>
-        <div class="muted form-intro">Поля соответствуют столбцам таблицы проектов (projects_sheet).</div>
+        <div class="muted form-intro">Заполните основные поля договора и этапа.</div>
 
         <div class="grid-2 grid-2--mt">
           <div class="field">
@@ -221,45 +288,40 @@
             <label>Этап *</label>
             <input type="text" name="etap_number" required />
           </div>
-
           <div class="field">
-            <label>Руководитель проекта (project_chief)</label>
+            <label>Руководитель проекта</label>
             <input type="text" name="project_chief" />
           </div>
           <div class="field">
-            <label>Вид договора (contract_kind)</label>
+            <label>Вид договора</label>
             <input type="text" name="contract_kind" />
           </div>
-
           <div class="field">
-            <label>Заказчик (client_name)</label>
+            <label>Заказчик</label>
             <input type="text" name="client_name" />
           </div>
           <div class="field">
-            <label>Исполнитель (executant_name)</label>
+            <label>Исполнитель</label>
             <input type="text" name="executant_name" />
           </div>
-
           <div class="field">
-            <label>Дата начала договора (contract_start_date, dd.mm.YYYY)</label>
-            <input type="text" name="contract_start_date" placeholder="dd.mm.YYYY" />
+            <label>Дата начала договора</label>
+            <input type="text" class="js-date" name="contract_start_date" placeholder="dd.mm.YYYY" />
           </div>
           <div class="field">
-            <label>Дата окончания договора (contract_end_date, dd.mm.YYYY)</label>
-            <input type="text" name="contract_end_date" placeholder="dd.mm.YYYY" />
-          </div>
-
-          <div class="field">
-            <label>План. дата начала (plan_start_date, dd.mm.YYYY)</label>
-            <input type="text" name="plan_start_date" placeholder="dd.mm.YYYY" />
+            <label>Дата окончания договора</label>
+            <input type="text" class="js-date" name="contract_end_date" placeholder="dd.mm.YYYY" />
           </div>
           <div class="field">
-            <label>План. дата окончания (plan_end_date, dd.mm.YYYY)</label>
-            <input type="text" name="plan_end_date" placeholder="dd.mm.YYYY" />
+            <label>План. дата начала</label>
+            <input type="text" class="js-date" name="plan_start_date" placeholder="dd.mm.YYYY" />
           </div>
-
           <div class="field">
-            <label>Статус проекта (project_status)</label>
+            <label>План. дата окончания</label>
+            <input type="text" class="js-date" name="plan_end_date" placeholder="dd.mm.YYYY" />
+          </div>
+          <div class="field">
+            <label>Статус проекта</label>
             <select name="project_status">
               <option value="">—</option>
               {% for s in status_catalog %}
@@ -268,22 +330,20 @@
             </select>
           </div>
           <div class="field">
-            <label>Период (period)</label>
+            <label>Период</label>
             <input type="text" name="period" />
           </div>
-
           <div class="field">
-            <label>Сумма этапа (etap_sum)</label>
+            <label>Сумма этапа</label>
             <input type="text" name="etap_sum" />
           </div>
           <div class="field">
-            <label>Сумма договора (contr_sum)</label>
+            <label>Сумма договора</label>
             <input type="text" name="contr_sum" />
           </div>
-
           <div class="field">
-            <label>Дата акта (act_date, dd.mm.YYYY)</label>
-            <input type="text" name="act_date" placeholder="dd.mm.YYYY" />
+            <label>Дата акта</label>
+            <input type="text" class="js-date" name="act_date" placeholder="dd.mm.YYYY" />
           </div>
         </div>
 
@@ -295,28 +355,70 @@
 
     <script>
       (function () {
-        const dlg = document.getElementById('createProjectDialog');
+        var createDlg = document.getElementById('createProjectDialog');
         window.__openCreateProjectDialog = function () {
-          if (dlg && dlg.showModal) dlg.showModal();
+          if (createDlg && createDlg.showModal) createDlg.showModal();
         };
         window.__closeCreateProjectDialog = function () {
-          if (dlg && dlg.close) dlg.close();
+          if (createDlg && createDlg.close) createDlg.close();
         };
-      })();
-    </script>
-    <script>
-      (function () {
-        // Для Директора строка должна открывать карточку,
-        // но при клике по полям/кнопкам редактирования — не навигировать.
-        document.querySelectorAll("tr[data-card-href]").forEach(function (tr) {
-          tr.addEventListener("click", function (e) {
-            var target = e.target;
-            if (target && target.closest && target.closest("input,select,textarea,button,a")) return;
-            var href = tr.getAttribute("data-card-href");
-            if (href) window.location.href = href;
+
+        var editDlg = document.getElementById('editProjectDialog');
+        var editClose = document.getElementById('editProjectClose');
+        if (editClose) {
+          editClose.addEventListener('click', function () {
+            if (editDlg && editDlg.close) editDlg.close();
+          });
+        }
+
+        document.querySelectorAll('.js-edit-project').forEach(function (btn) {
+          btn.addEventListener('click', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            document.getElementById('editContract').value = btn.getAttribute('data-contract') || '';
+            document.getElementById('editEtap').value = btn.getAttribute('data-etap') || '';
+            if (window.setDateInput) {
+              window.setDateInput(document.getElementById('editPlanStart'), btn.getAttribute('data-plan-start') || '');
+              window.setDateInput(document.getElementById('editPlanEnd'), btn.getAttribute('data-plan-end') || '');
+              window.setDateInput(document.getElementById('editActDate'), btn.getAttribute('data-act-date') || '');
+            } else {
+              document.getElementById('editPlanStart').value = btn.getAttribute('data-plan-start') || '';
+              document.getElementById('editPlanEnd').value = btn.getAttribute('data-plan-end') || '';
+              document.getElementById('editActDate').value = btn.getAttribute('data-act-date') || '';
+            }
+            document.getElementById('editStatus').value = btn.getAttribute('data-status') || '';
+            if (window.initDatePickers) window.initDatePickers(document.getElementById('editProjectDialog'));
+            document.getElementById('editProjectSubtitle').textContent =
+              'Договор ' + (btn.getAttribute('data-contract') || '') +
+              ', этап ' + (btn.getAttribute('data-etap') || '');
+            if (editDlg && editDlg.showModal) editDlg.showModal();
           });
         });
       })();
     </script>
   {% endif %}
+
+  <script>
+    (function () {
+      var sortSelect = document.getElementById('projects-sort');
+      if (!sortSelect) return;
+      var sortUrls = {
+        {% for col in ['contract_number', 'project_chief', 'client_name', 'executant_name', 'plan_start_date', 'plan_end_date', 'project_status'] %}
+          "{{ col }}": {{ projects_sort_url(col)|tojson }},
+        {% endfor %}
+        "": {{ url_for('projects')|tojson }}
+      };
+      sortSelect.addEventListener('change', function () {
+        var col = sortSelect.value;
+        if (!col) {
+          var u = new URL(window.location.href);
+          u.searchParams.delete('sort_by');
+          u.searchParams.delete('sort_dir');
+          window.location.href = u.pathname + (u.searchParams.toString() ? '?' + u.searchParams.toString() : '');
+          return;
+        }
+        if (sortUrls[col]) window.location.href = sortUrls[col];
+      });
+    })();
+  </script>
 {% endblock %}

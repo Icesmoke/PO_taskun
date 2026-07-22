@@ -3,7 +3,7 @@
 {% block content %}
   <div class="box po-mb">
     <h2 class="page-title">Ввод данных</h2>
-    <div class="muted">Три вкладки: Премии, Командировки, Подрядчики.</div>
+    <div class="muted">Премии, командировки и подрядчики — компактный список без горизонтальной прокрутки.</div>
   </div>
 
   <div class="tabs is-boxed mb-4">
@@ -22,44 +22,38 @@
 
   {% if tab == 'bonuses' %}
     <div class="box po-mb">
-      <h3 class="section-title">Таблица премий</h3>
-      <form method="get" action="{{ url_for('data_input') }}">
-        <input type="hidden" name="tab" value="bonuses" />
-        <div class="grid-2">
-          <div class="filter-field">
-            <div class="label">Договор</div>
-            <select
-              multiple
-              name="contract_number"
-              class="js-filter-multiselect"
-              data-placeholder="Договоры"
-            >
-              {% for c in filter_contracts_bonus %}
-                <option value="{{ c }}" {% if c in f_contract %}selected{% endif %}>{{ c }}</option>
-              {% endfor %}
-            </select>
-            <div class="text-hint">Поиск в списке, несколько значений; снять — крестик на теге.</div>
-          </div>
-          <div class="filter-field">
-            <div class="label">Сотрудник</div>
-            <select
-              multiple
-              name="worker_name"
-              class="js-filter-multiselect"
-              data-placeholder="Сотрудники"
-            >
-              {% for w in filter_workers_bonus %}
-                <option value="{{ w }}" {% if w in f_worker %}selected{% endif %}>{{ w }}</option>
-              {% endfor %}
-            </select>
-            <div class="text-hint">Поиск в списке, несколько значений; снять — крестик на теге.</div>
-          </div>
+      <details class="filter-panel" {% if f_contract or f_worker %}open{% endif %}>
+        <summary class="filter-panel__summary">
+          Фильтры{% if f_contract or f_worker %} <span class="filter-panel__badge">активны</span>{% endif %}
+        </summary>
+        <div class="filter-panel__body">
+          <form method="get" action="{{ url_for('data_input') }}">
+            <input type="hidden" name="tab" value="bonuses" />
+            <div class="grid-2">
+              <div class="filter-field">
+                <label class="label" for="bonus-filter-contract">Договор</label>
+                <select id="bonus-filter-contract" multiple name="contract_number" class="js-filter-multiselect" data-placeholder="Договоры">
+                  {% for c in filter_contracts_bonus %}
+                    <option value="{{ c }}" {% if c in f_contract %}selected{% endif %}>{{ c }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="filter-field">
+                <label class="label" for="bonus-filter-worker">Сотрудник</label>
+                <select id="bonus-filter-worker" multiple name="worker_name" class="js-filter-multiselect" data-placeholder="Сотрудники">
+                  {% for w in filter_workers_bonus %}
+                    <option value="{{ w }}" {% if w in f_worker %}selected{% endif %}>{{ w }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+            </div>
+            <div class="actions">
+              <button type="submit" class="button is-primary">Применить</button>
+              <a class="button is-light" href="{{ url_for('data_input', tab='bonuses') }}">Сбросить</a>
+            </div>
+          </form>
         </div>
-        <div class="actions">
-          <button type="submit" class="button is-primary">Применить фильтры</button>
-          <a class="button is-light" href="{{ url_for('data_input', tab='bonuses') }}">Сбросить</a>
-        </div>
-      </form>
+      </details>
     </div>
 
     <div class="box">
@@ -67,57 +61,51 @@
         <h3 class="section-title">Записи</h3>
         <div class="actions actions--zero">
           <button type="button" class="button is-primary" onclick="window.__openCreateBonus && window.__openCreateBonus()">Создать</button>
-          {% if role == 'Директор' %}
-            <button type="button" class="button is-light" onclick="window.__openEditBonus && window.__openEditBonus()">Изменить</button>
-          {% endif %}
         </div>
       </div>
 
-      <form method="post" action="{{ url_for('data_input_bonuses_delete') }}">
-        <div class="actions actions--tight-bottom">
-          <button type="submit" class="button is-danger is-light">Удалить</button>
+      {% if bonuses_rows %}
+        <div class="data-row-list">
+          {% for r in bonuses_rows %}
+            <article
+              class="data-row data-input-row"
+              data-rid="{{ r.rid }}"
+              data-contract_number="{{ r.contract_number or '' }}"
+              data-etap_number="{{ r.etap_number or '' }}"
+              data-worker_name="{{ r.worker_name or '' }}"
+              data-task_date="{{ r.task_date|format_date }}"
+              data-hours_number="{{ r.hours_number if r.hours_number is not none else '' }}"
+              data-bonus_sum="{{ r.bonus_sum if r.bonus_sum is not none else '' }}"
+            >
+              <div class="data-row__main">
+                <div class="data-row__head">
+                  <div class="data-row__title">{{ r.contract_number }} · этап {{ r.etap_number }}</div>
+                  {% if r.bonus_sum is not none %}
+                    <div class="data-row__amount">{{ r.bonus_sum|format_int_grouped }} ₽</div>
+                  {% endif %}
+                </div>
+                <div class="data-row__meta">
+                  {{ r.worker_name or '—' }}
+                  · {{ r.task_date|format_date or 'дата не указана' }}
+                  {% if r.hours_number is not none %} · {{ r.hours_number }} ч{% endif %}
+                </div>
+              </div>
+              <div class="data-row__actions">
+                {% if role == 'Директор' %}
+                  <button type="button" class="button is-small is-light js-edit-bonus">Изменить</button>
+                {% endif %}
+                <form method="post" action="{{ url_for('data_input_bonuses_delete') }}" class="data-row__delete"
+                      onsubmit="return confirm('Удалить запись безвозвратно?');">
+                  <input type="hidden" name="bonus_rid" value="{{ r.rid }}" />
+                  <button type="submit" class="button is-small is-danger is-light">Удалить</button>
+                </form>
+              </div>
+            </article>
+          {% endfor %}
         </div>
-        <p class="table-scroll-hint table-scroll-hint--mobile-only">Таблицу можно прокручивать по горизонтали.</p>
-        <div class="table-wrap table-wrap--sticky">
-          <table class="table is-striped is-hoverable is-fullwidth">
-            <thead>
-              <tr>
-                <th class="col-check">Выбор</th>
-                <th>Договор</th>
-                <th>Этап</th>
-                <th>Сотрудник</th>
-                <th>Дата</th>
-                <th class="num">Количество часов</th>
-                <th class="num">Сумма премии</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for r in bonuses_rows %}
-                <tr
-                  class="data-input-row"
-                  data-rid="{{ r.rid }}"
-                  data-contract_number="{{ r.contract_number or '' }}"
-                  data-etap_number="{{ r.etap_number or '' }}"
-                  data-worker_name="{{ r.worker_name or '' }}"
-                  data-task_date="{{ r.task_date|format_date }}"
-                  data-hours_number="{{ r.hours_number if r.hours_number is not none else '' }}"
-                  data-bonus_sum="{{ r.bonus_sum if r.bonus_sum is not none else '' }}"
-                >
-                  <td><input type="radio" name="bonus_rid" value="{{ r.rid }}" /></td>
-                  <td>{{ r.contract_number }}</td>
-                  <td>{{ r.etap_number }}</td>
-                  <td>{{ r.worker_name }}</td>
-                  <td>{{ r.task_date|format_date }}</td>
-                  <td class="num">{{ r.hours_number }}</td>
-                  <td class="num">{{ r.bonus_sum }}</td>
-                </tr>
-              {% else %}
-                <tr><td colspan="7" class="muted">Нет данных.</td></tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
-      </form>
+      {% else %}
+        <div class="task-empty">Нет данных.</div>
+      {% endif %}
     </div>
 
     <dialog id="dlgBonus" class="dialog-wide">
@@ -131,7 +119,7 @@
           <div class="field"><label>Договор *</label><input type="text" name="contract_number" id="bonusContract" required /></div>
           <div class="field"><label>Этап *</label><input type="text" name="etap_number" id="bonusEtap" required /></div>
           <div class="field"><label>Сотрудник *</label><input type="text" name="worker_name" id="bonusWorker" required /></div>
-          <div class="field"><label>Дата *</label><input type="text" name="task_date" id="bonusDate" placeholder="dd.mm.YYYY" required /></div>
+          <div class="field"><label>Дата *</label><input type="text" class="js-date" name="task_date" id="bonusDate" placeholder="dd.mm.YYYY" required /></div>
           <div class="field"><label>Количество часов</label><input type="text" name="hours_number" id="bonusHours" /></div>
           <div class="field"><label>Сумма премии</label><input type="text" name="bonus_sum" id="bonusSum" /></div>
         </div>
@@ -143,44 +131,38 @@
 
   {% elif tab == 'voyages' %}
     <div class="box po-mb">
-      <h3 class="section-title">Таблица командировок</h3>
-      <form method="get" action="{{ url_for('data_input') }}">
-        <input type="hidden" name="tab" value="voyages" />
-        <div class="grid-2">
-          <div class="filter-field">
-            <div class="label">Договор</div>
-            <select
-              multiple
-              name="contract_number"
-              class="js-filter-multiselect"
-              data-placeholder="Договоры"
-            >
-              {% for c in filter_contracts_voy %}
-                <option value="{{ c }}" {% if c in f_contract %}selected{% endif %}>{{ c }}</option>
-              {% endfor %}
-            </select>
-            <div class="text-hint">Поиск в списке, несколько значений; снять — крестик на теге.</div>
-          </div>
-          <div class="filter-field">
-            <div class="label">Сотрудник</div>
-            <select
-              multiple
-              name="worker_name"
-              class="js-filter-multiselect"
-              data-placeholder="Сотрудники"
-            >
-              {% for w in filter_workers_voy %}
-                <option value="{{ w }}" {% if w in f_worker %}selected{% endif %}>{{ w }}</option>
-              {% endfor %}
-            </select>
-            <div class="text-hint">Поиск в списке, несколько значений; снять — крестик на теге.</div>
-          </div>
+      <details class="filter-panel" {% if f_contract or f_worker %}open{% endif %}>
+        <summary class="filter-panel__summary">
+          Фильтры{% if f_contract or f_worker %} <span class="filter-panel__badge">активны</span>{% endif %}
+        </summary>
+        <div class="filter-panel__body">
+          <form method="get" action="{{ url_for('data_input') }}">
+            <input type="hidden" name="tab" value="voyages" />
+            <div class="grid-2">
+              <div class="filter-field">
+                <label class="label" for="voy-filter-contract">Договор</label>
+                <select id="voy-filter-contract" multiple name="contract_number" class="js-filter-multiselect" data-placeholder="Договоры">
+                  {% for c in filter_contracts_voy %}
+                    <option value="{{ c }}" {% if c in f_contract %}selected{% endif %}>{{ c }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="filter-field">
+                <label class="label" for="voy-filter-worker">Сотрудник</label>
+                <select id="voy-filter-worker" multiple name="worker_name" class="js-filter-multiselect" data-placeholder="Сотрудники">
+                  {% for w in filter_workers_voy %}
+                    <option value="{{ w }}" {% if w in f_worker %}selected{% endif %}>{{ w }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+            </div>
+            <div class="actions">
+              <button type="submit" class="button is-primary">Применить</button>
+              <a class="button is-light" href="{{ url_for('data_input', tab='voyages') }}">Сбросить</a>
+            </div>
+          </form>
         </div>
-        <div class="actions">
-          <button type="submit" class="button is-primary">Применить фильтры</button>
-          <a class="button is-light" href="{{ url_for('data_input', tab='voyages') }}">Сбросить</a>
-        </div>
-      </form>
+      </details>
     </div>
 
     <div class="box">
@@ -188,57 +170,51 @@
         <h3 class="section-title">Записи</h3>
         <div class="actions actions--zero">
           <button type="button" class="button is-primary" onclick="window.__openCreateVoyage && window.__openCreateVoyage()">Создать</button>
-          {% if role == 'Директор' %}
-            <button type="button" class="button is-light" onclick="window.__openEditVoyage && window.__openEditVoyage()">Изменить</button>
-          {% endif %}
         </div>
       </div>
 
-      <form method="post" action="{{ url_for('data_input_voyages_delete') }}">
-        <div class="actions actions--tight-bottom">
-          <button type="submit" class="button is-danger is-light">Удалить</button>
+      {% if voyages_rows %}
+        <div class="data-row-list">
+          {% for r in voyages_rows %}
+            <article
+              class="data-row data-input-row"
+              data-rid="{{ r.rid }}"
+              data-contract_number="{{ r.contract_number or '' }}"
+              data-etap_number="{{ r.etap_number or '' }}"
+              data-worker_name="{{ r.worker_name or '' }}"
+              data-voyage_date="{{ r.voyage_date|format_date }}"
+              data-voyage_cost_kind="{{ r.voyage_cost_kind or '' }}"
+              data-voyage_cost_sum="{{ r.voyage_cost_sum if r.voyage_cost_sum is not none else '' }}"
+            >
+              <div class="data-row__main">
+                <div class="data-row__head">
+                  <div class="data-row__title">{{ r.contract_number }} · этап {{ r.etap_number }}</div>
+                  {% if r.voyage_cost_sum is not none %}
+                    <div class="data-row__amount">{{ r.voyage_cost_sum|format_int_grouped }} ₽</div>
+                  {% endif %}
+                </div>
+                <div class="data-row__meta">
+                  {{ r.worker_name or '—' }}
+                  · {{ r.voyage_date|format_date or 'дата не указана' }}
+                  {% if r.voyage_cost_kind %} · {{ r.voyage_cost_kind }}{% endif %}
+                </div>
+              </div>
+              <div class="data-row__actions">
+                {% if role == 'Директор' %}
+                  <button type="button" class="button is-small is-light js-edit-voyage">Изменить</button>
+                {% endif %}
+                <form method="post" action="{{ url_for('data_input_voyages_delete') }}" class="data-row__delete"
+                      onsubmit="return confirm('Удалить запись безвозвратно?');">
+                  <input type="hidden" name="voyage_rid" value="{{ r.rid }}" />
+                  <button type="submit" class="button is-small is-danger is-light">Удалить</button>
+                </form>
+              </div>
+            </article>
+          {% endfor %}
         </div>
-        <p class="table-scroll-hint table-scroll-hint--mobile-only">Таблицу можно прокручивать по горизонтали.</p>
-        <div class="table-wrap table-wrap--sticky">
-          <table class="table is-striped is-hoverable is-fullwidth">
-            <thead>
-              <tr>
-                <th class="col-check">Выбор</th>
-                <th>Договор</th>
-                <th>Этап</th>
-                <th>Сотрудник</th>
-                <th>Дата командировки</th>
-                <th>Вид затрат</th>
-                <th class="num">Сумма затрат</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for r in voyages_rows %}
-                <tr
-                  class="data-input-row"
-                  data-rid="{{ r.rid }}"
-                  data-contract_number="{{ r.contract_number or '' }}"
-                  data-etap_number="{{ r.etap_number or '' }}"
-                  data-worker_name="{{ r.worker_name or '' }}"
-                  data-voyage_date="{{ r.voyage_date|format_date }}"
-                  data-voyage_cost_kind="{{ r.voyage_cost_kind or '' }}"
-                  data-voyage_cost_sum="{{ r.voyage_cost_sum if r.voyage_cost_sum is not none else '' }}"
-                >
-                  <td><input type="radio" name="voyage_rid" value="{{ r.rid }}" /></td>
-                  <td>{{ r.contract_number }}</td>
-                  <td>{{ r.etap_number }}</td>
-                  <td>{{ r.worker_name }}</td>
-                  <td>{{ r.voyage_date|format_date }}</td>
-                  <td>{{ r.voyage_cost_kind }}</td>
-                  <td class="num">{{ r.voyage_cost_sum }}</td>
-                </tr>
-              {% else %}
-                <tr><td colspan="7" class="muted">Нет данных.</td></tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
-      </form>
+      {% else %}
+        <div class="task-empty">Нет данных.</div>
+      {% endif %}
     </div>
 
     <dialog id="dlgVoyage" class="dialog-wide">
@@ -252,7 +228,7 @@
           <div class="field"><label>Договор *</label><input type="text" name="contract_number" id="voyageContract" required /></div>
           <div class="field"><label>Этап *</label><input type="text" name="etap_number" id="voyageEtap" required /></div>
           <div class="field"><label>Сотрудник *</label><input type="text" name="worker_name" id="voyageWorker" required /></div>
-          <div class="field"><label>Дата командировки *</label><input type="text" name="voyage_date" id="voyageDate" placeholder="dd.mm.YYYY" required /></div>
+          <div class="field"><label>Дата командировки *</label><input type="text" class="js-date" name="voyage_date" id="voyageDate" placeholder="dd.mm.YYYY" required /></div>
           <div class="field">
             <label>Вид затрат</label>
             <select name="voyage_cost_kind" id="voyageKind">
@@ -272,44 +248,38 @@
 
   {% else %}
     <div class="box po-mb">
-      <h3 class="section-title">Таблица подрядчиков</h3>
-      <form method="get" action="{{ url_for('data_input') }}">
-        <input type="hidden" name="tab" value="contracters" />
-        <div class="grid-2">
-          <div class="filter-field">
-            <div class="label">Договор</div>
-            <select
-              multiple
-              name="contract_number"
-              class="js-filter-multiselect"
-              data-placeholder="Договоры"
-            >
-              {% for c in filter_contracts_ctr %}
-                <option value="{{ c }}" {% if c in f_contract %}selected{% endif %}>{{ c }}</option>
-              {% endfor %}
-            </select>
-            <div class="text-hint">Поиск в списке, несколько значений; снять — крестик на теге.</div>
-          </div>
-          <div class="filter-field">
-            <div class="label">Подрядчик</div>
-            <select
-              multiple
-              name="contracter_name"
-              class="js-filter-multiselect"
-              data-placeholder="Подрядчики"
-            >
-              {% for n in filter_contracters %}
-                <option value="{{ n }}" {% if n in f_contracter %}selected{% endif %}>{{ n }}</option>
-              {% endfor %}
-            </select>
-            <div class="text-hint">Поиск в списке, несколько значений; снять — крестик на теге.</div>
-          </div>
+      <details class="filter-panel" {% if f_contract or f_contracter %}open{% endif %}>
+        <summary class="filter-panel__summary">
+          Фильтры{% if f_contract or f_contracter %} <span class="filter-panel__badge">активны</span>{% endif %}
+        </summary>
+        <div class="filter-panel__body">
+          <form method="get" action="{{ url_for('data_input') }}">
+            <input type="hidden" name="tab" value="contracters" />
+            <div class="grid-2">
+              <div class="filter-field">
+                <label class="label" for="ctr-filter-contract">Договор</label>
+                <select id="ctr-filter-contract" multiple name="contract_number" class="js-filter-multiselect" data-placeholder="Договоры">
+                  {% for c in filter_contracts_ctr %}
+                    <option value="{{ c }}" {% if c in f_contract %}selected{% endif %}>{{ c }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="filter-field">
+                <label class="label" for="ctr-filter-name">Подрядчик</label>
+                <select id="ctr-filter-name" multiple name="contracter_name" class="js-filter-multiselect" data-placeholder="Подрядчики">
+                  {% for n in filter_contracters %}
+                    <option value="{{ n }}" {% if n in f_contracter %}selected{% endif %}>{{ n }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+            </div>
+            <div class="actions">
+              <button type="submit" class="button is-primary">Применить</button>
+              <a class="button is-light" href="{{ url_for('data_input', tab='contracters') }}">Сбросить</a>
+            </div>
+          </form>
         </div>
-        <div class="actions">
-          <button type="submit" class="button is-primary">Применить фильтры</button>
-          <a class="button is-light" href="{{ url_for('data_input', tab='contracters') }}">Сбросить</a>
-        </div>
-      </form>
+      </details>
     </div>
 
     <div class="box">
@@ -317,63 +287,54 @@
         <h3 class="section-title">Записи</h3>
         <div class="actions actions--zero">
           <button type="button" class="button is-primary" onclick="window.__openCreateContracter && window.__openCreateContracter()">Создать</button>
-          {% if role == 'Директор' %}
-            <button type="button" class="button is-light" onclick="window.__openEditContracter && window.__openEditContracter()">Изменить</button>
-          {% endif %}
         </div>
       </div>
 
-      <form method="post" action="{{ url_for('data_input_contracters_delete') }}">
-        <div class="actions actions--tight-bottom">
-          <button type="submit" class="button is-danger is-light">Удалить</button>
+      {% if contracters_rows %}
+        <div class="data-row-list">
+          {% for r in contracters_rows %}
+            <article
+              class="data-row data-input-row"
+              data-rid="{{ r.rid }}"
+              data-contract_number="{{ r.contract_number or '' }}"
+              data-etap_number="{{ r.etap_number or '' }}"
+              data-contracter_name="{{ r.contracter_name or '' }}"
+              data-task_start_date="{{ r.task_start_date|format_date }}"
+              data-task_end_date="{{ r.task_end_date|format_date }}"
+              data-contracters_hours_number="{{ r.contracters_hours_number if r.contracters_hours_number is not none else '' }}"
+              data-contracters_cost_sum="{{ r.contracters_cost_sum if r.contracters_cost_sum is not none else '' }}"
+              data-comment="{{ r.comment or '' }}"
+            >
+              <div class="data-row__main">
+                <div class="data-row__head">
+                  <div class="data-row__title">{{ r.contracter_name or 'Подрядчик' }}</div>
+                  {% if r.contracters_cost_sum is not none %}
+                    <div class="data-row__amount">{{ r.contracters_cost_sum|format_int_grouped }} ₽</div>
+                  {% endif %}
+                </div>
+                <div class="data-row__meta">
+                  {{ r.contract_number }} · этап {{ r.etap_number }}
+                  · {{ r.task_start_date|format_date or '…' }} — {{ r.task_end_date|format_date or '…' }}
+                  {% if r.contracters_hours_number is not none %} · {{ r.contracters_hours_number }} ч{% endif %}
+                  {% if r.comment %} · {{ r.comment }}{% endif %}
+                </div>
+              </div>
+              <div class="data-row__actions">
+                {% if role == 'Директор' %}
+                  <button type="button" class="button is-small is-light js-edit-contracter">Изменить</button>
+                {% endif %}
+                <form method="post" action="{{ url_for('data_input_contracters_delete') }}" class="data-row__delete"
+                      onsubmit="return confirm('Удалить запись безвозвратно?');">
+                  <input type="hidden" name="contracter_rid" value="{{ r.rid }}" />
+                  <button type="submit" class="button is-small is-danger is-light">Удалить</button>
+                </form>
+              </div>
+            </article>
+          {% endfor %}
         </div>
-        <p class="table-scroll-hint table-scroll-hint--mobile-only">Таблицу можно прокручивать по горизонтали.</p>
-        <div class="table-wrap table-wrap--sticky">
-          <table class="table is-striped is-hoverable is-fullwidth">
-            <thead>
-              <tr>
-                <th class="col-check">Выбор</th>
-                <th>Договор</th>
-                <th>Этап</th>
-                <th>Подрядчик</th>
-                <th>Дата начала работы</th>
-                <th>Дата окончания работы</th>
-                <th class="num">Количество часов</th>
-                <th class="num">Сумма затрат</th>
-                <th>Комментарий</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for r in contracters_rows %}
-                <tr
-                  class="data-input-row"
-                  data-rid="{{ r.rid }}"
-                  data-contract_number="{{ r.contract_number or '' }}"
-                  data-etap_number="{{ r.etap_number or '' }}"
-                  data-contracter_name="{{ r.contracter_name or '' }}"
-                  data-task_start_date="{{ r.task_start_date|format_date }}"
-                  data-task_end_date="{{ r.task_end_date|format_date }}"
-                  data-contracters_hours_number="{{ r.contracters_hours_number if r.contracters_hours_number is not none else '' }}"
-                  data-contracters_cost_sum="{{ r.contracters_cost_sum if r.contracters_cost_sum is not none else '' }}"
-                  data-comment="{{ r.comment or '' }}"
-                >
-                  <td><input type="radio" name="contracter_rid" value="{{ r.rid }}" /></td>
-                  <td>{{ r.contract_number }}</td>
-                  <td>{{ r.etap_number }}</td>
-                  <td>{{ r.contracter_name }}</td>
-                  <td>{{ r.task_start_date|format_date }}</td>
-                  <td>{{ r.task_end_date|format_date }}</td>
-                  <td class="num">{{ r.contracters_hours_number }}</td>
-                  <td class="num">{{ r.contracters_cost_sum }}</td>
-                  <td>{{ r.comment }}</td>
-                </tr>
-              {% else %}
-                <tr><td colspan="9" class="muted">Нет данных.</td></tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
-      </form>
+      {% else %}
+        <div class="task-empty">Нет данных.</div>
+      {% endif %}
     </div>
 
     <dialog id="dlgContracter" class="dialog-wide">
@@ -388,8 +349,8 @@
           <div class="field"><label>Этап *</label><input type="text" name="etap_number" id="contracterEtap" required /></div>
           <div class="field"><label>Подрядчик *</label><input type="text" name="contracter_name" id="contracterName" required /></div>
           <div class="field"><label>Количество часов</label><input type="text" name="contracters_hours_number" id="contracterHours" /></div>
-          <div class="field"><label>Дата начала работы</label><input type="text" name="task_start_date" id="contracterStart" placeholder="dd.mm.YYYY" /></div>
-          <div class="field"><label>Дата окончания работы</label><input type="text" name="task_end_date" id="contracterEnd" placeholder="dd.mm.YYYY" /></div>
+          <div class="field"><label>Дата начала работы</label><input type="text" class="js-date" name="task_start_date" id="contracterStart" placeholder="dd.mm.YYYY" /></div>
+          <div class="field"><label>Дата окончания работы</label><input type="text" class="js-date" name="task_end_date" id="contracterEnd" placeholder="dd.mm.YYYY" /></div>
           <div class="field"><label>Сумма затрат</label><input type="text" name="contracters_cost_sum" id="contracterSum" /></div>
           <div class="field"><label>Комментарий</label><input type="text" name="comment" id="contracterComment" /></div>
         </div>
@@ -411,42 +372,47 @@
         if (dlg && dlg.close) dlg.close();
       };
 
-      function selectedRow(radioName) {
-        var sel = document.querySelector('input[name="' + radioName + '"]:checked');
-        if (!sel) return null;
-        return sel.closest("tr.data-input-row");
-      }
-
       function setupCrud(opts) {
         var form = document.getElementById(opts.formId);
         if (!form) return;
+
+        function fillFields(getVal) {
+          opts.fields.forEach(function (f) {
+            var el = document.getElementById(f.id);
+            if (!el) return;
+            var val = getVal(f) || "";
+            if (el.classList.contains("js-date") && window.setDateInput) {
+              window.setDateInput(el, val);
+            } else {
+              el.value = val;
+            }
+          });
+        }
 
         window[opts.openCreateFn] = function () {
           form.action = opts.createUrl;
           document.getElementById(opts.ridId).value = "";
           document.getElementById(opts.titleId).textContent = opts.createTitle;
-          opts.fields.forEach(function (f) {
-            var el = document.getElementById(f.id);
-            if (el) el.value = f.defaultValue || "";
-          });
+          fillFields(function (f) { return f.defaultValue || ""; });
+          if (window.initDatePickers) window.initDatePickers(document.getElementById(opts.dialogId));
           window.__openDlg(opts.dialogId);
         };
 
-        window[opts.openEditFn] = function () {
-          var tr = selectedRow(opts.radioName);
-          if (!tr) {
-            alert(opts.selectMessage);
-            return;
-          }
+        function openEditForRow(row) {
           form.action = opts.updateUrl;
-          document.getElementById(opts.ridId).value = tr.getAttribute("data-rid") || "";
+          document.getElementById(opts.ridId).value = row.getAttribute("data-rid") || "";
           document.getElementById(opts.titleId).textContent = opts.editTitle;
-          opts.fields.forEach(function (f) {
-            var el = document.getElementById(f.id);
-            if (el) el.value = tr.getAttribute(f.dataAttr) || "";
-          });
+          fillFields(function (f) { return row.getAttribute(f.dataAttr) || ""; });
+          if (window.initDatePickers) window.initDatePickers(document.getElementById(opts.dialogId));
           window.__openDlg(opts.dialogId);
-        };
+        }
+
+        document.querySelectorAll(opts.editBtnSelector).forEach(function (btn) {
+          btn.addEventListener("click", function () {
+            var row = btn.closest(".data-input-row");
+            if (row) openEditForRow(row);
+          });
+        });
       }
 
       setupCrud({
@@ -454,14 +420,12 @@
         dialogId: "dlgBonus",
         ridId: "bonusRid",
         titleId: "dlgBonusTitle",
-        radioName: "bonus_rid",
+        editBtnSelector: ".js-edit-bonus",
         createUrl: "{{ url_for('data_input_bonuses_create') }}",
         updateUrl: "{{ url_for('data_input_bonuses_update') }}",
         openCreateFn: "__openCreateBonus",
-        openEditFn: "__openEditBonus",
         createTitle: "Создание записи (Премии)",
         editTitle: "Редактирование записи (Премии)",
-        selectMessage: "Выберите строку для редактирования (радиокнопка в колонке «Выбор»).",
         fields: [
           { id: "bonusContract", dataAttr: "data-contract_number" },
           { id: "bonusEtap", dataAttr: "data-etap_number" },
@@ -477,14 +441,12 @@
         dialogId: "dlgVoyage",
         ridId: "voyageRid",
         titleId: "dlgVoyageTitle",
-        radioName: "voyage_rid",
+        editBtnSelector: ".js-edit-voyage",
         createUrl: "{{ url_for('data_input_voyages_create') }}",
         updateUrl: "{{ url_for('data_input_voyages_update') }}",
         openCreateFn: "__openCreateVoyage",
-        openEditFn: "__openEditVoyage",
         createTitle: "Создание записи (Командировки)",
         editTitle: "Редактирование записи (Командировки)",
-        selectMessage: "Выберите строку для редактирования (радиокнопка в колонке «Выбор»).",
         fields: [
           { id: "voyageContract", dataAttr: "data-contract_number" },
           { id: "voyageEtap", dataAttr: "data-etap_number" },
@@ -500,14 +462,12 @@
         dialogId: "dlgContracter",
         ridId: "contracterRid",
         titleId: "dlgContracterTitle",
-        radioName: "contracter_rid",
+        editBtnSelector: ".js-edit-contracter",
         createUrl: "{{ url_for('data_input_contracters_create') }}",
         updateUrl: "{{ url_for('data_input_contracters_update') }}",
         openCreateFn: "__openCreateContracter",
-        openEditFn: "__openEditContracter",
         createTitle: "Создание записи (Подрядчики)",
         editTitle: "Редактирование записи (Подрядчики)",
-        selectMessage: "Выберите строку для редактирования (радиокнопка в колонке «Выбор»).",
         fields: [
           { id: "contracterContract", dataAttr: "data-contract_number" },
           { id: "contracterEtap", dataAttr: "data-etap_number" },

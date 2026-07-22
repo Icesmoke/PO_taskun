@@ -1,4 +1,4 @@
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import datetime as dt
 import logging
@@ -127,6 +127,34 @@ def create_app() -> Flask:
         return s.replace(",", " ")
 
     app.jinja_env.filters["format_int_grouped"] = _format_int_grouped
+
+    def _rel_luminance(r: int, g: int, b: int) -> float:
+        """WCAG relative luminance for an sRGB colour (channels 0..255)."""
+        def chan(c: float) -> float:
+            c /= 255.0
+            return c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
+
+        return 0.2126 * chan(r) + 0.7152 * chan(g) + 0.0722 * chan(b)
+
+    def _contrast_text(hex_color: object) -> str:
+        """Pick #fff or a dark text colour — whichever has more WCAG contrast on the given bg."""
+        dark = "#111827"
+        try:
+            s = str(hex_color).strip().lstrip("#")
+            if len(s) == 3:
+                s = "".join(ch * 2 for ch in s)
+            if len(s) != 6:
+                return dark
+            r, g, b = int(s[0:2], 16), int(s[2:4], 16), int(s[4:6], 16)
+        except Exception:
+            return dark
+        bg = _rel_luminance(r, g, b)
+        white_l, dark_l = 1.0, _rel_luminance(0x11, 0x18, 0x27)
+        contrast_white = (white_l + 0.05) / (bg + 0.05)
+        contrast_dark = (bg + 0.05) / (dark_l + 0.05)
+        return "#ffffff" if contrast_white >= contrast_dark else dark
+
+    app.jinja_env.filters["contrast_text"] = _contrast_text
 
     @app.context_processor
     def inject_globals():
@@ -285,6 +313,18 @@ def create_app() -> Flask:
         if sort_by not in allowed_sort:
             sort_by = None
 
+        # Options for filters — from role-visible projects without UI filters.
+        visible_for_filters = fetch_projects(role=role, current_short_name=short_name)
+        all_kinds = sorted(
+            {str(p["contract_kind"]) for p in visible_for_filters if p["contract_kind"] is not None}
+        )
+        all_executants = sorted(
+            {p["executant_name"] for p in visible_for_filters if p["executant_name"] is not None}
+        )
+        all_project_chiefs = fetch_report_project_chiefs(role, short_name) if is_director(role) else []
+        all_statuses = fetch_project_statuses()
+        status_catalog = fetch_project_status_catalog() if is_director(role) else []
+
         projects_rows = fetch_projects(
             role=role,
             current_short_name=short_name,
@@ -298,29 +338,48 @@ def create_app() -> Flask:
             sort_dir=sort_dir,
         )
 
-        # Filter choice lists:
-        # contract_kind/executant_name can be derived from projects table, keep it simple.
-        # (We avoid heavy joins for pilot.)
-        all_kinds = sorted({str(p["contract_kind"]) for p in projects_rows if p["contract_kind"] is not None})
-        all_executants = sorted({p["executant_name"] for p in projects_rows if p["executant_name"] is not None})
-        all_project_chiefs = fetch_report_project_chiefs(role, short_name) if is_director(role) else []
-        all_statuses = fetch_project_statuses()
-        status_catalog = fetch_project_status_catalog() if is_director(role) else []
-
-        def projects_sort_url(column: str) -> str:
+        def _projects_query_url(params: Dict[str, List[str]]) -> str:
             from urllib.parse import urlencode
 
-            params = request.args.to_dict(flat=False)
-            next_dir = "desc" if sort_by == column and sort_dir == "asc" else "asc"
-            params["sort_by"] = [column]
-            params["sort_dir"] = [next_dir]
-            pairs: List[tuple[str, str]] = []
+            pairs: List[Tuple[str, str]] = []
             for key, values in params.items():
                 for value in values:
                     if value is not None and str(value) != "":
                         pairs.append((key, str(value)))
             query = urlencode(pairs)
             return url_for("projects") + ("?" + query if query else "")
+
+        def projects_sort_url(column: str) -> str:
+            params = request.args.to_dict(flat=False)
+            next_dir = "desc" if sort_by == column and sort_dir == "asc" else "asc"
+            params["sort_by"] = [column]
+            params["sort_dir"] = [next_dir]
+            return _projects_query_url(params)
+
+        def projects_filter_without(key: str, value: Optional[str] = None) -> str:
+            params = request.args.to_dict(flat=False)
+            if value is None:
+                params.pop(key, None)
+            else:
+                params[key] = [v for v in params.get(key, []) if str(v) != str(value)]
+                if not params[key]:
+                    params.pop(key, None)
+            return _projects_query_url(params)
+
+        def projects_clear_period() -> str:
+            params = request.args.to_dict(flat=False)
+            params.pop("period_start", None)
+            params.pop("period_end", None)
+            return _projects_query_url(params)
+
+        filters_active = bool(
+            (contract_kinds or [])
+            or (executant_names or [])
+            or (project_chiefs or [])
+            or (statuses or [])
+            or period_start
+            or period_end
+        )
 
         return render_template(
             "projects.html",
@@ -341,6 +400,9 @@ def create_app() -> Flask:
             sort_by=sort_by or "",
             sort_dir=sort_dir,
             projects_sort_url=projects_sort_url,
+            projects_filter_without=projects_filter_without,
+            projects_clear_period=projects_clear_period,
+            filters_active=filters_active,
         )
 
     @app.post("/projects/create")
@@ -593,7 +655,7 @@ def create_app() -> Flask:
             if len(parts) != 3:
                 return ""
             y, m, d = int(parts[0]), int(parts[1]), int(parts[2])
-            return f"{d:02d}-{m:02d}-{y:04d}"
+            return f"{d:02d}.{m:02d}.{y:04d}"
 
         if not date_start_raw:
             date_start_raw = iso_to_ddmmyyyy(default_min_iso) if default_min_iso else ""
