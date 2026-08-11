@@ -135,7 +135,7 @@
     <div class="box">
       <h3 class="section-title">Отчет по утилизации</h3>
       {% if util_employees|length == 0 %}
-        <div class="muted">Нет данных для выбранного периода.</div>
+        <div class="muted">Нет сотрудников для отображения.</div>
       {% else %}
         {% for w in util_employees %}
           {% set days_on_projects = util_total_by_employee[w] %}
@@ -159,12 +159,18 @@
                     </tr>
                   </thead>
                   <tbody>
-                    {% for contract_number, days in util_by_employee[w].items() %}
+                    {% if util_by_employee[w] %}
+                      {% for contract_number, days in util_by_employee[w].items() %}
+                        <tr>
+                          <td>{{ contract_number }}</td>
+                          <td class="num">{{ days }}</td>
+                        </tr>
+                      {% endfor %}
+                    {% else %}
                       <tr>
-                        <td>{{ contract_number }}</td>
-                        <td class="num">{{ days }}</td>
+                        <td colspan="2" class="muted">Нет задач по проектам в выбранном периоде.</td>
                       </tr>
-                    {% endfor %}
+                    {% endif %}
                   </tbody>
                 </table>
               </div>

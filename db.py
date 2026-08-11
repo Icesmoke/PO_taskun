@@ -504,21 +504,41 @@ def update_project_fields(
     *,
     contract_number: str,
     etap_number: str,
-    plan_start_date: str,
-    plan_end_date: str,
-    project_status: str,
-    act_date: Optional[str],
-) -> None:
+    project: Dict[str, Any],
+) -> bool:
+    """
+    Update editable project columns for (contract_number, etap_number).
+    Keys of `project` match create_project (except identity keys used in WHERE).
+    """
+    cols = [
+        "contract_kind",
+        "client_name",
+        "executant_name",
+        "contract_start_date",
+        "contract_end_date",
+        "plan_start_date",
+        "plan_end_date",
+        "project_status",
+        "period",
+        "project_chief",
+        "etap_sum",
+        "contr_sum",
+        "act_date",
+    ]
+    sets = ", ".join(f"{c} = ?" for c in cols)
+    values = [project.get(c) for c in cols]
+    values.extend([contract_number, etap_number])
     with get_connection() as con:
-        con.execute(
-            """
+        cur = con.execute(
+            f"""
             UPDATE projects
-            SET plan_start_date = ?, plan_end_date = ?, project_status = ?, act_date = ?
+            SET {sets}
             WHERE contract_number = ? AND etap_number = ?
             """,
-            (plan_start_date, plan_end_date, project_status, act_date, contract_number, etap_number),
+            values,
         )
         con.commit()
+        return cur.rowcount > 0
 
 
 def replace_project_tasks(contract_number: str, etap_number: str, tasks: List[Dict[str, Any]]) -> None:

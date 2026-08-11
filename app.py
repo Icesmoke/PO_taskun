@@ -128,6 +128,35 @@ def create_app() -> Flask:
 
     app.jinja_env.filters["format_int_grouped"] = _format_int_grouped
 
+    def _rel_luminance(r: int, g: int, b: int) -> float:
+        """WCAG relative luminance for an sRGB colour (channels 0..255)."""
+
+        def chan(c: float) -> float:
+            c /= 255.0
+            return c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
+
+        return 0.2126 * chan(r) + 0.7152 * chan(g) + 0.0722 * chan(b)
+
+    def _contrast_text(hex_color: object) -> str:
+        """Pick #fff or dark text — whichever has more WCAG contrast on the given bg."""
+        dark = "#111827"
+        try:
+            s = str(hex_color).strip().lstrip("#")
+            if len(s) == 3:
+                s = "".join(ch * 2 for ch in s)
+            if len(s) != 6:
+                return dark
+            r, g, b = int(s[0:2], 16), int(s[2:4], 16), int(s[4:6], 16)
+        except Exception:
+            return dark
+        bg = _rel_luminance(r, g, b)
+        white_l, dark_l = 1.0, _rel_luminance(0x11, 0x18, 0x27)
+        contrast_white = (white_l + 0.05) / (bg + 0.05)
+        contrast_dark = (bg + 0.05) / (dark_l + 0.05)
+        return "#ffffff" if contrast_white >= contrast_dark else dark
+
+    app.jinja_env.filters["contrast_text"] = _contrast_text
+
     @app.context_processor
     def inject_globals():
         user = session.get("user")
@@ -463,49 +492,71 @@ def create_app() -> Flask:
             flash("Редактирование проектов доступно только Директору.", "error")
             return redirect(url_for("projects"))
 
-        contract_number = request.form.get("contract_number", "").strip()
-        etap_number = request.form.get("etap_number", "").strip()
-        plan_start_ui = request.form.get("plan_start_date", "").strip()
-        plan_end_ui = request.form.get("plan_end_date", "").strip()
-        act_date_ui = request.form.get("act_date", "").strip()
-        project_status = request.form.get("project_status", "").strip()
+        def empty_to_none(v: Any) -> Any:
+            if v is None:
+                return None
+            if isinstance(v, str):
+                s = v.strip()
+                return s if s != "" else None
+            return v
 
+        def norm_date_ddmmyyyy(v: str) -> Any:
+            s = (v or "").strip()
+            if not s:
+                return None
+            try:
+                parse_date_from_ddmmyyyy(s)
+            except Exception:
+                raise ValueError("Неверный формат даты (ожидается dd.mm.YYYY).")
+            return normalize_sqlite_timestamp_date(s)
+
+        contract_number = (request.form.get("contract_number") or "").strip()
+        etap_number = (request.form.get("etap_number") or "").strip()
         if not contract_number or not etap_number:
             flash("Не указан проект для сохранения.", "error")
             return redirect(url_for("projects"))
 
-        # Validate status against catalog
-        catalog = set(fetch_project_status_catalog())
-        if project_status not in catalog:
-            flash("Некорректный статус проекта.", "error")
+        try:
+            project_status = empty_to_none(request.form.get("project_status"))
+            if project_status is not None:
+                catalog = set(fetch_project_status_catalog())
+                if project_status not in catalog:
+                    flash("Некорректный статус проекта.", "error")
+                    return redirect(url_for("projects"))
+
+            fields = {
+                "contract_kind": empty_to_none(request.form.get("contract_kind")),
+                "client_name": empty_to_none(request.form.get("client_name")),
+                "executant_name": empty_to_none(request.form.get("executant_name")),
+                "contract_start_date": norm_date_ddmmyyyy(request.form.get("contract_start_date", "")),
+                "contract_end_date": norm_date_ddmmyyyy(request.form.get("contract_end_date", "")),
+                "plan_start_date": norm_date_ddmmyyyy(request.form.get("plan_start_date", "")),
+                "plan_end_date": norm_date_ddmmyyyy(request.form.get("plan_end_date", "")),
+                "project_status": project_status,
+                "period": empty_to_none(request.form.get("period")),
+                "project_chief": empty_to_none(request.form.get("project_chief")),
+                "etap_sum": empty_to_none(request.form.get("etap_sum")),
+                "contr_sum": empty_to_none(request.form.get("contr_sum")),
+                "act_date": norm_date_ddmmyyyy(request.form.get("act_date", "")),
+            }
+        except ValueError as e:
+            flash(str(e), "error")
             return redirect(url_for("projects"))
 
         try:
-            parse_date_from_ddmmyyyy(plan_start_ui)
-            parse_date_from_ddmmyyyy(plan_end_ui)
+            ok = update_project_fields(
+                contract_number=contract_number,
+                etap_number=etap_number,
+                project=fields,
+            )
         except Exception:
-            flash("Неверный формат дат (ожидается dd.mm.YYYY).", "error")
+            logger.exception("update_project failed for contract=%s etap=%s", contract_number, etap_number)
+            flash("Не удалось обновить проект. Обратитесь к администратору.", "error")
             return redirect(url_for("projects"))
 
-        plan_start_db = normalize_sqlite_timestamp_date(plan_start_ui)
-        plan_end_db = normalize_sqlite_timestamp_date(plan_end_ui)
-        act_date_db = None
-        if act_date_ui:
-            try:
-                parse_date_from_ddmmyyyy(act_date_ui)
-            except Exception:
-                flash("Неверный формат даты акта (ожидается dd.mm.YYYY).", "error")
-                return redirect(url_for("projects"))
-            act_date_db = normalize_sqlite_timestamp_date(act_date_ui)
-
-        update_project_fields(
-            contract_number=contract_number,
-            etap_number=etap_number,
-            plan_start_date=plan_start_db,
-            plan_end_date=plan_end_db,
-            project_status=project_status,
-            act_date=act_date_db,
-        )
+        if not ok:
+            flash("Проект не найден.", "error")
+            return redirect(url_for("projects"))
 
         flash("Проект обновлен.", "success")
         return redirect(url_for("projects"))
@@ -722,16 +773,29 @@ def create_app() -> Flask:
         elif report_type == "util":
             cal = calendar_for_period(date_start, date_end)
             util_period_workdays = len(cal.workdays_inclusive(date_start, date_end))
+
+            # Все активные сотрудники + те, кто встречается в задачах (на случай рассинхрона имён)
+            all_worker_names = [
+                str(w["short_name"])
+                for w in fetch_workers(enabled_only=True)
+                if w.get("short_name")
+            ]
             if intervals:
-                util_employees, util_by_employee = build_utilisation_model(intervals, calendar=cal)
+                _emps_with_tasks, util_by_employee = build_utilisation_model(intervals, calendar=cal)
                 project_days = employee_project_workdays(intervals, calendar=cal)
-                for w in util_employees:
-                    days_on_projects = project_days.get(w, 0)
-                    util_total_by_employee[w] = days_on_projects
-                    if util_period_workdays:
-                        util_rate_by_employee[w] = 100.0 * days_on_projects / util_period_workdays
-                    else:
-                        util_rate_by_employee[w] = 0.0
+            else:
+                util_by_employee = {}
+                project_days = {}
+
+            util_employees = sorted(set(all_worker_names) | set(util_by_employee.keys()))
+            for w in util_employees:
+                util_by_employee.setdefault(w, {})
+                days_on_projects = int(project_days.get(w, 0))
+                util_total_by_employee[w] = days_on_projects
+                if util_period_workdays:
+                    util_rate_by_employee[w] = 100.0 * days_on_projects / util_period_workdays
+                else:
+                    util_rate_by_employee[w] = 0.0
         else:
             cal = calendar_for_period(date_start, date_end)
 

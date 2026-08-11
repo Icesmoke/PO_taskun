@@ -394,8 +394,9 @@
           document.getElementById(opts.ridId).value = "";
           document.getElementById(opts.titleId).textContent = opts.createTitle;
           fillFields(function (f) { return f.defaultValue || ""; });
-          if (window.initDatePickers) window.initDatePickers(document.getElementById(opts.dialogId));
           window.__openDlg(opts.dialogId);
+          if (window.reinitDatePickers) window.reinitDatePickers(document.getElementById(opts.dialogId));
+          else if (window.initDatePickers) window.initDatePickers(document.getElementById(opts.dialogId));
         };
 
         function openEditForRow(row) {
@@ -403,8 +404,10 @@
           document.getElementById(opts.ridId).value = row.getAttribute("data-rid") || "";
           document.getElementById(opts.titleId).textContent = opts.editTitle;
           fillFields(function (f) { return row.getAttribute(f.dataAttr) || ""; });
-          if (window.initDatePickers) window.initDatePickers(document.getElementById(opts.dialogId));
           window.__openDlg(opts.dialogId);
+          if (window.reinitDatePickers) window.reinitDatePickers(document.getElementById(opts.dialogId));
+          else if (window.initDatePickers) window.initDatePickers(document.getElementById(opts.dialogId));
+          fillFields(function (f) { return row.getAttribute(f.dataAttr) || ""; });
         }
 
         document.querySelectorAll(opts.editBtnSelector).forEach(function (btn) {
