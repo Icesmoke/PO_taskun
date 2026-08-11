@@ -211,10 +211,19 @@
                   class="button is-small is-light js-edit-project"
                   data-contract="{{ p.contract_number }}"
                   data-etap="{{ p.etap_number }}"
+                  data-project-chief="{{ p.project_chief or '' }}"
+                  data-contract-kind="{{ p.contract_kind or '' }}"
+                  data-client-name="{{ p.client_name or '' }}"
+                  data-executant-name="{{ p.executant_name or '' }}"
+                  data-contract-start="{{ p.contract_start_date|format_date }}"
+                  data-contract-end="{{ p.contract_end_date|format_date }}"
                   data-plan-start="{{ p.plan_start_date|format_date }}"
                   data-plan-end="{{ p.plan_end_date|format_date }}"
-                  data-act-date="{{ p.act_date|format_date }}"
                   data-status="{{ p.project_status or '' }}"
+                  data-period="{{ p.period or '' }}"
+                  data-etap-sum="{{ p.etap_sum if p.etap_sum is not none else '' }}"
+                  data-contr-sum="{{ p.contr_sum if p.contr_sum is not none else '' }}"
+                  data-act-date="{{ p.act_date|format_date }}"
                 >Изменить</button>
               </div>
             {% endif %}
@@ -236,35 +245,83 @@
   {% if role == 'Директор' %}
     <dialog id="editProjectDialog" class="dialog-wide">
       <form method="post" action="{{ url_for('update_project') }}" id="editProjectForm">
-        <input type="hidden" name="contract_number" id="editContract" />
-        <input type="hidden" name="etap_number" id="editEtap" />
         <div class="flex-between">
           <h3 class="dialog__title">Изменение проекта</h3>
           <button type="button" class="button is-light" id="editProjectClose">Закрыть</button>
         </div>
         <p class="muted form-intro" id="editProjectSubtitle"></p>
+        <p class="muted form-intro">Можно изменить все поля проекта. Номер договора и этап менять нельзя.</p>
+
+        <div class="dialog__body">
         <div class="grid-2 grid-2--mt">
           <div class="field">
+            <label for="editContract">Номер договора</label>
+            <input id="editContract" type="text" name="contract_number" readonly />
+          </div>
+          <div class="field">
+            <label for="editEtap">Этап</label>
+            <input id="editEtap" type="text" name="etap_number" readonly />
+          </div>
+          <div class="field">
+            <label for="editChief">Руководитель проекта</label>
+            <input id="editChief" type="text" name="project_chief" />
+          </div>
+          <div class="field">
+            <label for="editKind">Вид договора</label>
+            <input id="editKind" type="text" name="contract_kind" />
+          </div>
+          <div class="field">
+            <label for="editClient">Заказчик</label>
+            <input id="editClient" type="text" name="client_name" />
+          </div>
+          <div class="field">
+            <label for="editExecutant">Исполнитель</label>
+            <input id="editExecutant" type="text" name="executant_name" />
+          </div>
+          <div class="field">
+            <label for="editContractStart">Дата начала договора</label>
+            <input id="editContractStart" type="text" class="js-date" name="contract_start_date" placeholder="dd.mm.YYYY" autocomplete="off" />
+          </div>
+          <div class="field">
+            <label for="editContractEnd">Дата окончания договора</label>
+            <input id="editContractEnd" type="text" class="js-date" name="contract_end_date" placeholder="dd.mm.YYYY" autocomplete="off" />
+          </div>
+          <div class="field">
             <label for="editPlanStart">План. дата начала</label>
-            <input id="editPlanStart" type="text" class="js-date" name="plan_start_date" placeholder="dd.mm.YYYY" />
+            <input id="editPlanStart" type="text" class="js-date" name="plan_start_date" placeholder="dd.mm.YYYY" autocomplete="off" />
           </div>
           <div class="field">
             <label for="editPlanEnd">План. дата окончания</label>
-            <input id="editPlanEnd" type="text" class="js-date" name="plan_end_date" placeholder="dd.mm.YYYY" />
+            <input id="editPlanEnd" type="text" class="js-date" name="plan_end_date" placeholder="dd.mm.YYYY" autocomplete="off" />
           </div>
           <div class="field">
             <label for="editStatus">Статус проекта</label>
             <select id="editStatus" name="project_status">
+              <option value="">—</option>
               {% for s in status_catalog %}
                 <option value="{{ s }}">{{ s }}</option>
               {% endfor %}
             </select>
           </div>
           <div class="field">
+            <label for="editPeriod">Период</label>
+            <input id="editPeriod" type="text" name="period" />
+          </div>
+          <div class="field">
+            <label for="editEtapSum">Сумма этапа</label>
+            <input id="editEtapSum" type="text" name="etap_sum" />
+          </div>
+          <div class="field">
+            <label for="editContrSum">Сумма договора</label>
+            <input id="editContrSum" type="text" name="contr_sum" />
+          </div>
+          <div class="field">
             <label for="editActDate">Дата акта</label>
-            <input id="editActDate" type="text" class="js-date" name="act_date" placeholder="dd.mm.YYYY" />
+            <input id="editActDate" type="text" class="js-date" name="act_date" placeholder="dd.mm.YYYY" autocomplete="off" />
           </div>
         </div>
+        </div>
+
         <div class="actions actions--end">
           <button type="submit" class="button is-primary">Сохранить</button>
         </div>
@@ -279,6 +336,7 @@
         </div>
         <div class="muted form-intro">Заполните основные поля договора и этапа.</div>
 
+        <div class="dialog__body">
         <div class="grid-2 grid-2--mt">
           <div class="field">
             <label>Номер договора *</label>
@@ -306,19 +364,19 @@
           </div>
           <div class="field">
             <label>Дата начала договора</label>
-            <input type="text" class="js-date" name="contract_start_date" placeholder="dd.mm.YYYY" />
+            <input type="text" class="js-date" name="contract_start_date" placeholder="dd.mm.YYYY" autocomplete="off" />
           </div>
           <div class="field">
             <label>Дата окончания договора</label>
-            <input type="text" class="js-date" name="contract_end_date" placeholder="dd.mm.YYYY" />
+            <input type="text" class="js-date" name="contract_end_date" placeholder="dd.mm.YYYY" autocomplete="off" />
           </div>
           <div class="field">
             <label>План. дата начала</label>
-            <input type="text" class="js-date" name="plan_start_date" placeholder="dd.mm.YYYY" />
+            <input type="text" class="js-date" name="plan_start_date" placeholder="dd.mm.YYYY" autocomplete="off" />
           </div>
           <div class="field">
             <label>План. дата окончания</label>
-            <input type="text" class="js-date" name="plan_end_date" placeholder="dd.mm.YYYY" />
+            <input type="text" class="js-date" name="plan_end_date" placeholder="dd.mm.YYYY" autocomplete="off" />
           </div>
           <div class="field">
             <label>Статус проекта</label>
@@ -343,8 +401,9 @@
           </div>
           <div class="field">
             <label>Дата акта</label>
-            <input type="text" class="js-date" name="act_date" placeholder="dd.mm.YYYY" />
+            <input type="text" class="js-date" name="act_date" placeholder="dd.mm.YYYY" autocomplete="off" />
           </div>
+        </div>
         </div>
 
         <div class="actions actions--end">
@@ -357,7 +416,11 @@
       (function () {
         var createDlg = document.getElementById('createProjectDialog');
         window.__openCreateProjectDialog = function () {
-          if (createDlg && createDlg.showModal) createDlg.showModal();
+          if (createDlg && createDlg.showModal) {
+            createDlg.showModal();
+            if (window.reinitDatePickers) window.reinitDatePickers(createDlg);
+            else if (window.initDatePickers) window.initDatePickers(createDlg);
+          }
         };
         window.__closeCreateProjectDialog = function () {
           if (createDlg && createDlg.close) createDlg.close();
@@ -375,23 +438,47 @@
           btn.addEventListener('click', function (e) {
             e.preventDefault();
             e.stopPropagation();
-            document.getElementById('editContract').value = btn.getAttribute('data-contract') || '';
-            document.getElementById('editEtap').value = btn.getAttribute('data-etap') || '';
-            if (window.setDateInput) {
-              window.setDateInput(document.getElementById('editPlanStart'), btn.getAttribute('data-plan-start') || '');
-              window.setDateInput(document.getElementById('editPlanEnd'), btn.getAttribute('data-plan-end') || '');
-              window.setDateInput(document.getElementById('editActDate'), btn.getAttribute('data-act-date') || '');
-            } else {
-              document.getElementById('editPlanStart').value = btn.getAttribute('data-plan-start') || '';
-              document.getElementById('editPlanEnd').value = btn.getAttribute('data-plan-end') || '';
-              document.getElementById('editActDate').value = btn.getAttribute('data-act-date') || '';
+
+            function fill(id, val) {
+              var el = document.getElementById(id);
+              if (!el) return;
+              if (el.classList.contains('js-date') && window.setDateInput) {
+                window.setDateInput(el, val || '');
+              } else {
+                el.value = val || '';
+              }
             }
-            document.getElementById('editStatus').value = btn.getAttribute('data-status') || '';
-            if (window.initDatePickers) window.initDatePickers(document.getElementById('editProjectDialog'));
+
+            fill('editContract', btn.getAttribute('data-contract'));
+            fill('editEtap', btn.getAttribute('data-etap'));
+            fill('editChief', btn.getAttribute('data-project-chief'));
+            fill('editKind', btn.getAttribute('data-contract-kind'));
+            fill('editClient', btn.getAttribute('data-client-name'));
+            fill('editExecutant', btn.getAttribute('data-executant-name'));
+            fill('editContractStart', btn.getAttribute('data-contract-start'));
+            fill('editContractEnd', btn.getAttribute('data-contract-end'));
+            fill('editPlanStart', btn.getAttribute('data-plan-start'));
+            fill('editPlanEnd', btn.getAttribute('data-plan-end'));
+            fill('editStatus', btn.getAttribute('data-status'));
+            fill('editPeriod', btn.getAttribute('data-period'));
+            fill('editEtapSum', btn.getAttribute('data-etap-sum'));
+            fill('editContrSum', btn.getAttribute('data-contr-sum'));
+            fill('editActDate', btn.getAttribute('data-act-date'));
+
             document.getElementById('editProjectSubtitle').textContent =
               'Договор ' + (btn.getAttribute('data-contract') || '') +
               ', этап ' + (btn.getAttribute('data-etap') || '');
-            if (editDlg && editDlg.showModal) editDlg.showModal();
+
+            if (editDlg && editDlg.showModal) {
+              editDlg.showModal();
+              if (window.reinitDatePickers) window.reinitDatePickers(editDlg);
+              else if (window.initDatePickers) window.initDatePickers(editDlg);
+              fill('editContractStart', btn.getAttribute('data-contract-start'));
+              fill('editContractEnd', btn.getAttribute('data-contract-end'));
+              fill('editPlanStart', btn.getAttribute('data-plan-start'));
+              fill('editPlanEnd', btn.getAttribute('data-plan-end'));
+              fill('editActDate', btn.getAttribute('data-act-date'));
+            }
           });
         });
       })();

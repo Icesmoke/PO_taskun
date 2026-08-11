@@ -1715,7 +1715,10 @@ dialog {
   background: var(--color-surface);
   box-shadow: var(--shadow-md);
   max-height: 90vh;
-  overflow-y: auto;
+  /* relative — якорь для absolute-календаря Flatpickr */
+  position: relative;
+  /* visible — иначе календарь обрезается overflow */
+  overflow: visible;
 }
 
 dialog::backdrop {
@@ -1729,6 +1732,21 @@ dialog::backdrop {
 
 .dialog-narrow {
   max-width: 460px;
+}
+
+.dialog__body {
+  max-height: min(70vh, 720px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  margin: var(--space-sm) 0;
+  padding-right: 2px;
+  -webkit-overflow-scrolling: touch;
+}
+
+dialog input[readonly] {
+  background: var(--color-bg-alt);
+  color: var(--color-muted);
+  cursor: default;
 }
 
 .form-intro {
