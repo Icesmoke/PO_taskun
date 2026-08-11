@@ -128,34 +128,6 @@ def create_app() -> Flask:
 
     app.jinja_env.filters["format_int_grouped"] = _format_int_grouped
 
-    def _rel_luminance(r: int, g: int, b: int) -> float:
-        """WCAG relative luminance for an sRGB colour (channels 0..255)."""
-        def chan(c: float) -> float:
-            c /= 255.0
-            return c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
-
-        return 0.2126 * chan(r) + 0.7152 * chan(g) + 0.0722 * chan(b)
-
-    def _contrast_text(hex_color: object) -> str:
-        """Pick #fff or a dark text colour — whichever has more WCAG contrast on the given bg."""
-        dark = "#111827"
-        try:
-            s = str(hex_color).strip().lstrip("#")
-            if len(s) == 3:
-                s = "".join(ch * 2 for ch in s)
-            if len(s) != 6:
-                return dark
-            r, g, b = int(s[0:2], 16), int(s[2:4], 16), int(s[4:6], 16)
-        except Exception:
-            return dark
-        bg = _rel_luminance(r, g, b)
-        white_l, dark_l = 1.0, _rel_luminance(0x11, 0x18, 0x27)
-        contrast_white = (white_l + 0.05) / (bg + 0.05)
-        contrast_dark = (bg + 0.05) / (dark_l + 0.05)
-        return "#ffffff" if contrast_white >= contrast_dark else dark
-
-    app.jinja_env.filters["contrast_text"] = _contrast_text
-
     @app.context_processor
     def inject_globals():
         user = session.get("user")
@@ -609,7 +581,7 @@ def create_app() -> Flask:
 
         role = current_role()
         if role not in {"Директор", "Руководитель проекта"}:
-            flash("Панель отчетов доступна только Директору и Руководителю проекта.", "error")
+            flash("Панель отчетов не доступна.", "error")
             return redirect(url_for("projects"))
 
         # Type of report
@@ -619,7 +591,7 @@ def create_app() -> Flask:
 
         is_director = role == "Директор"
         if report_type == "util" and not is_director:
-            flash("Отчёт по утилизации доступен только Директору.", "error")
+            flash("Отчёт по утилизации не доступен.", "error")
             return redirect(url_for("reports", report_type="gant"))
 
         # Filters
