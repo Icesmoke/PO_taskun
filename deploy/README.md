@@ -41,10 +41,14 @@ docker compose up -d
 
 ## Обновление версии
 
+Из готового образа (этот каталог `deploy/`):
+
 ```bash
 docker compose pull
 docker compose up -d
 ```
+
+Из исходников (корень репозитория, сборка на сервере): `./update.sh` — `git pull`, `docker compose build`, health-check `/login`. База и сессии при обновлении не затираются.
 
 ## Публичный vs приватный образ
 

@@ -44,6 +44,12 @@ class WorkdayCalendar:
             cur += dt.timedelta(days=1)
         return out
 
+    def remaining_workdays(self, today: dt.date, end: dt.date) -> int:
+        """Working days strictly after today, up to and including end. Overdue or due today → 0."""
+        if end <= today:
+            return 0
+        return len(self.workdays_inclusive(today + dt.timedelta(days=1), end))
+
 
 def calendar_for_period(start: dt.date, end: dt.date) -> WorkdayCalendar:
     years = range(start.year, end.year + 1)

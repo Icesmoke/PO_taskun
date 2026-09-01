@@ -1,8 +1,9 @@
 import datetime as dt
 from dataclasses import dataclass
-from typing import Dict, Iterable, List, Sequence, Set, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
-from workdays import WorkdayCalendar
+from utils import format_date_ddmmyyyy, parse_date_from_ddmmyyyy
+from workdays import WorkdayCalendar, calendar_for_period
 
 
 @dataclass(frozen=True)
@@ -155,4 +156,163 @@ def build_gantt_model(
         cell_contracts_list[w] = {d: sorted(list(cell_contracts[w][d])) for d in days}
 
     return employees, list(days), cell_contracts_list, colour_by_contract
+
+
+_ACTIVE_TASK_STATUSES = {"план", "в работе"}
+_GRAY_TASK_STATUSES = {"выполнено", "отмена"}
+
+
+def _parse_db_date(value: object) -> Optional[dt.date]:
+    s = format_date_ddmmyyyy(value)
+    if not s:
+        return None
+    try:
+        return parse_date_from_ddmmyyyy(s)
+    except Exception:
+        return None
+
+
+def _pct(done: int, total: int) -> Optional[float]:
+    if total <= 0:
+        return None
+    return 100.0 * done / total
+
+
+def task_traffic_light(status: str, remaining_workdays: int) -> str:
+    st = (status or "").strip().casefold()
+    if st in _GRAY_TASK_STATUSES:
+        return "gray"
+    if st in _ACTIVE_TASK_STATUSES:
+        if remaining_workdays > 3:
+            return "green"
+        if remaining_workdays > 1:
+            return "yellow"
+        return "red"
+    return ""
+
+
+def build_execution_report(
+    rows: Sequence[Dict[str, Any]],
+    *,
+    today: dt.date,
+    enabled_short_names: Optional[Set[str]] = None,
+) -> List[Dict[str, Any]]:
+    """
+    Hierarchy: worker → project stage → tasks.
+    Days are summed task durations (working days). Done = status «Выполнено».
+    """
+    dated: List[dt.date] = [today]
+    parsed: List[Dict[str, Any]] = []
+    for r in rows:
+        worker = str(r.get("worker_name") or "").strip()
+        if not worker:
+            continue
+        if enabled_short_names is not None and worker not in enabled_short_names:
+            continue
+        enabled = r.get("worker_enabled")
+        if enabled is not None and int(enabled or 0) == 0:
+            continue
+        t_start = _parse_db_date(r.get("task_start_date"))
+        t_end = _parse_db_date(r.get("task_end_date"))
+        p_start = _parse_db_date(r.get("plan_start_date"))
+        p_end = _parse_db_date(r.get("plan_end_date"))
+        for d in (t_start, t_end, p_start, p_end):
+            if d:
+                dated.append(d)
+        parsed.append(
+            {
+                "worker_name": worker,
+                "worker_full_name": str(r.get("worker_full_name") or "").strip(),
+                "contract_number": str(r.get("contract_number") or "").strip(),
+                "etap_number": str(r.get("etap_number") if r.get("etap_number") is not None else "").strip(),
+                "project_status": str(r.get("project_status") or "").strip(),
+                "plan_start": p_start,
+                "plan_end": p_end,
+                "task_name": str(r.get("task_name") or "").strip(),
+                "task_status": str(r.get("task_status") or "").strip(),
+                "task_start": t_start,
+                "task_end": t_end,
+            }
+        )
+    if not parsed:
+        return []
+
+    cal = calendar_for_period(min(dated), max(dated))
+    workers: Dict[str, Dict[str, Any]] = {}
+
+    for item in parsed:
+        wkey = item["worker_name"]
+        worker = workers.setdefault(
+            wkey,
+            {
+                "worker_name": wkey,
+                "full_name": item["worker_full_name"],
+                "status": "",
+                "start": "",
+                "end": "",
+                "days": 0,
+                "done": 0,
+                "total": 0,
+                "pct": None,
+                "projects": {},
+            },
+        )
+        if item["worker_full_name"] and not worker["full_name"]:
+            worker["full_name"] = item["worker_full_name"]
+
+        pkey = (item["contract_number"], item["etap_number"])
+        project = worker["projects"].setdefault(
+            pkey,
+            {
+                "contract_number": item["contract_number"],
+                "etap_number": item["etap_number"],
+                "status": item["project_status"],
+                "start": format_date_ddmmyyyy(item["plan_start"]) if item["plan_start"] else "",
+                "end": format_date_ddmmyyyy(item["plan_end"]) if item["plan_end"] else "",
+                "days": 0,
+                "done": 0,
+                "total": 0,
+                "pct": None,
+                "tasks": [],
+            },
+        )
+
+        days = 0
+        if item["task_start"] and item["task_end"]:
+            days = len(cal.workdays_inclusive(item["task_start"], item["task_end"]))
+        remaining = cal.remaining_workdays(today, item["task_end"]) if item["task_end"] else 0
+        is_done = (item["task_status"] or "").strip().casefold() == "выполнено"
+        done_n = 1 if is_done else 0
+        project["tasks"].append(
+            {
+                "task_name": item["task_name"] or "—",
+                "status": item["task_status"],
+                "start": format_date_ddmmyyyy(item["task_start"]) if item["task_start"] else "",
+                "end": format_date_ddmmyyyy(item["task_end"]) if item["task_end"] else "",
+                "days": days,
+                "done": done_n,
+                "total": 1,
+                "pct": 100.0 if is_done else 0.0,
+                "light": task_traffic_light(item["task_status"], remaining),
+            }
+        )
+        project["days"] += days
+        project["done"] += done_n
+        project["total"] += 1
+        worker["days"] += days
+        worker["done"] += done_n
+        worker["total"] += 1
+
+    out: List[Dict[str, Any]] = []
+    for wkey in sorted(workers.keys()):
+        worker = workers[wkey]
+        projects_list: List[Dict[str, Any]] = []
+        for pkey in sorted(worker["projects"].keys(), key=lambda x: (x[0], x[1])):
+            project = worker["projects"][pkey]
+            project["pct"] = _pct(project["done"], project["total"])
+            projects_list.append(project)
+        worker["projects"] = projects_list
+        worker["pct"] = _pct(worker["done"], worker["total"])
+        out.append(worker)
+    return out
 

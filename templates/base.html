@@ -70,15 +70,16 @@
                   >Пользователи</a
                 >
               </li>
+              <li>
+                <a class="{% if nav_reports %}is-active{% endif %}" href="{{ url_for('reports', report_type='exec') }}">Отчёты</a>
+              </li>
             {% else %}
               <li>
                 <a class="{% if nav_projects %}is-active{% endif %}" href="{{ url_for('projects') }}">Проекты</a>
               </li>
-              {% if current_user.worker_role in ['Директор', 'Руководитель проекта'] %}
-                <li>
-                  <a class="{% if nav_reports %}is-active{% endif %}" href="{{ url_for('reports') }}">Отчёты</a>
-                </li>
-              {% endif %}
+              <li>
+                <a class="{% if nav_reports %}is-active{% endif %}" href="{{ url_for('reports') }}">Отчёты</a>
+              </li>
               {% if current_user.worker_role == 'Директор' %}
                 <li>
                   <a class="{% if nav_data %}is-active{% endif %}" href="{{ url_for('data_input') }}">Ввод данных</a>

@@ -152,7 +152,7 @@
       <div class="list-toolbar__sort">
         <label class="list-toolbar__sort-label" for="projects-sort">Сортировка</label>
         <select id="projects-sort" class="list-toolbar__sort-select">
-          <option value="" {% if not sort_by %}selected{% endif %}>По умолчанию</option>
+          <option value="">По умолчанию (сначала поздняя дата окончания)</option>
           <option value="contract_number" {% if sort_by == 'contract_number' %}selected{% endif %}>Номер договора</option>
           {% if role == 'Директор' %}
             <option value="project_chief" {% if sort_by == 'project_chief' %}selected{% endif %}>Руководитель</option>
