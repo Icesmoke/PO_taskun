@@ -452,7 +452,7 @@ def fetch_projects(
     if sort_by and sort_by in sort_columns:
         sql += f" ORDER BY {sort_columns[sort_by]} {direction}, contract_number, etap_number"
     else:
-        sql += " ORDER BY contract_number, etap_number"
+        sql += " ORDER BY date(plan_end_date) DESC, contract_number, etap_number"
 
     with get_connection() as con:
         rows = con.execute(sql, params).fetchall()
@@ -648,6 +648,25 @@ def fetch_report_contract_numbers(worker_role: str, current_short_name: str) -> 
                 """,
                 (current_short_name,),
             ).fetchall()
+        elif worker_role == "Консультант":
+            rows = con.execute(
+                """
+                SELECT DISTINCT t.contract_number
+                FROM tasks t
+                WHERE t.contract_number IS NOT NULL
+                  AND TRIM(t.contract_number) <> ''
+                  AND (
+                    TRIM(t.worker_name) = TRIM(?)
+                    OR TRIM(t.worker_name) = (
+                      SELECT TRIM(full_name) FROM workers w0
+                      WHERE TRIM(w0.short_name) = TRIM(?)
+                      LIMIT 1
+                    )
+                  )
+                ORDER BY t.contract_number
+                """,
+                (current_short_name, current_short_name),
+            ).fetchall()
         else:
             rows = con.execute(
                 """
@@ -679,10 +698,119 @@ def fetch_report_project_chiefs(worker_role: str, current_short_name: str) -> Li
     with get_connection() as con:
         if worker_role == "Руководитель проекта":
             return [current_short_name]
+        if worker_role == "Консультант":
+            rows = con.execute(
+                """
+                SELECT DISTINCT p.project_chief
+                FROM projects p
+                JOIN tasks t
+                  ON t.contract_number = p.contract_number
+                 AND t.etap_number = p.etap_number
+                WHERE p.project_chief IS NOT NULL
+                  AND TRIM(p.project_chief) <> ''
+                  AND (
+                    TRIM(t.worker_name) = TRIM(?)
+                    OR TRIM(t.worker_name) = (
+                      SELECT TRIM(full_name) FROM workers w0
+                      WHERE TRIM(w0.short_name) = TRIM(?)
+                      LIMIT 1
+                    )
+                  )
+                ORDER BY p.project_chief
+                """,
+                (current_short_name, current_short_name),
+            ).fetchall()
+            return [r[0] for r in rows]
         rows = con.execute(
             "SELECT DISTINCT project_chief FROM projects WHERE project_chief IS NOT NULL ORDER BY project_chief"
         ).fetchall()
         return [r[0] for r in rows]
+
+
+def _execution_role_filters(
+    *,
+    worker_role: str,
+    current_short_name: str,
+    project_chief: Optional[str],
+    contract_number: Optional[str],
+) -> Tuple[List[str], List[Any]]:
+    where: List[str] = []
+    params: List[Any] = []
+    if worker_role == "Руководитель проекта":
+        where.append("p.project_chief = ?")
+        params.append(current_short_name)
+    elif worker_role == "Консультант":
+        where.append(
+            "("
+            "TRIM(t.worker_name) = TRIM(?)"
+            " OR TRIM(t.worker_name) = ("
+            "SELECT TRIM(full_name) FROM workers w0 WHERE TRIM(w0.short_name) = TRIM(?) LIMIT 1"
+            ")"
+            ")"
+        )
+        params.extend([current_short_name, current_short_name])
+    if project_chief and worker_role != "Руководитель проекта":
+        where.append("p.project_chief = ?")
+        params.append(project_chief)
+    if contract_number:
+        where.append("t.contract_number = ?")
+        params.append(contract_number)
+    return where, params
+
+
+def fetch_tasks_for_execution_report(
+    *,
+    start_date_iso: str,
+    end_date_iso: str,
+    worker_role: str,
+    current_short_name: str,
+    project_chief: Optional[str] = None,
+    contract_number: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    """
+    Tasks for «Выполнение задач»: a task is included if its date interval
+    overlaps [start, end] (same overlap rule as Gantt).
+    Worker name is resolved to workers.short_name when possible.
+    """
+    where, params = _execution_role_filters(
+        worker_role=worker_role,
+        current_short_name=current_short_name,
+        project_chief=project_chief,
+        contract_number=contract_number,
+    )
+    where.append("date(t.task_start_date) <= date(?)")
+    params.append(end_date_iso)
+    where.append("date(t.task_end_date) >= date(?)")
+    params.append(start_date_iso)
+    sql = f"""
+        SELECT
+            COALESCE(w_sn.short_name, w_fn.short_name, TRIM(t.worker_name)) AS worker_name,
+            COALESCE(w_sn.full_name, w_fn.full_name, '') AS worker_full_name,
+            COALESCE(w_sn.enabled, w_fn.enabled, 1) AS worker_enabled,
+            t.contract_number,
+            t.etap_number,
+            p.project_status,
+            p.plan_start_date,
+            p.plan_end_date,
+            t.task_name,
+            t.task_status,
+            t.task_start_date,
+            t.task_end_date
+        FROM tasks t
+        JOIN projects p
+          ON p.contract_number = t.contract_number
+         AND p.etap_number = t.etap_number
+        LEFT JOIN workers w_sn
+          ON TRIM(t.worker_name) = TRIM(w_sn.short_name)
+        LEFT JOIN workers w_fn
+          ON w_sn.workers_id IS NULL
+         AND TRIM(t.worker_name) = TRIM(w_fn.full_name)
+        WHERE {" AND ".join(where)}
+        ORDER BY worker_name, t.contract_number, t.etap_number, date(t.task_start_date), t.task_name
+    """
+    with get_connection() as con:
+        rows = con.execute(sql, params).fetchall()
+        return [dict(r) for r in rows]
 
 
 def fetch_tasks_intervals_for_reports(
@@ -770,6 +898,16 @@ def fetch_tasks_date_bounds_for_reports(
         if worker_role == "Руководитель проекта":
             where.append("p.project_chief = ?")
             params.append(current_short_name)
+        elif worker_role == "Консультант":
+            where.append(
+                "("
+                "TRIM(t.worker_name) = TRIM(?)"
+                " OR TRIM(t.worker_name) = ("
+                "SELECT TRIM(full_name) FROM workers w0 WHERE TRIM(w0.short_name) = TRIM(?) LIMIT 1"
+                ")"
+                ")"
+            )
+            params.extend([current_short_name, current_short_name])
 
         if contract_kind:
             where.append("p.contract_kind = ?")

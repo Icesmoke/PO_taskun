@@ -5,16 +5,21 @@
 
   <div class="tabs is-boxed mb-4">
     <ul>
+      {% if current_user.worker_role in ['Директор', 'Руководитель проекта'] %}
       <li class="{% if report_type == 'gant' %}is-active{% endif %}">
         <a href="{{ url_for('reports', report_type='gant', date_start=date_start, date_end=date_end, contract_kind=contract_kind or '', contract_number=contract_number or '', project_chief=project_chief or '') }}">Диаграмма ганта</a>
       </li>
+      {% endif %}
       {% if is_director %}
       <li class="{% if report_type == 'util' %}is-active{% endif %}">
         <a href="{{ url_for('reports', report_type='util', date_start=date_start, date_end=date_end, contract_kind=contract_kind or '', project_chief=project_chief or '') }}">Отчет по утилизации</a>
       </li>
-      {% endif %}
       <li class="{% if report_type == 'econ' %}is-active{% endif %}">
         <a href="{{ url_for('reports', report_type='econ', date_start=date_start, date_end=date_end, contract_kind=contract_kind or '', project_chief=project_chief or '') }}">Экономика проектов</a>
+      </li>
+      {% endif %}
+      <li class="{% if report_type == 'exec' %}is-active{% endif %}">
+        <a href="{{ url_for('reports', report_type='exec', date_start=date_start, date_end=date_end, contract_number=contract_number or '', project_chief=project_chief or '') }}">Выполнение задач</a>
       </li>
     </ul>
   </div>
@@ -43,7 +48,11 @@
         </div>
         <div class="text-hint stack-mt">Для Ганта максимум 31 день. Пресеты задают период от сегодня назад.</div>
       {% endif %}
+      {% if report_type == 'exec' %}
+        <div class="text-hint stack-mt">В отчёт попадают задачи, интервал которых пересекается с выбранным периодом.</div>
+      {% endif %}
 
+      {% if report_type != 'exec' %}
       <div class="grid-2 grid-2--mt">
         <div>
           <label class="label" for="report-contract-kind">Вид договора</label>
@@ -68,6 +77,32 @@
           {% endif %}
         </div>
       </div>
+      {% else %}
+      <div class="grid-2 grid-2--mt">
+        <div>
+          <label class="label" for="report-project-chief">Руководитель проекта</label>
+          {% if is_chief %}
+            <input id="report-project-chief" type="text" value="{{ project_chief }}" disabled />
+          {% else %}
+            <select id="report-project-chief" name="project_chief">
+              <option value="" {% if not project_chief %}selected{% endif %}>(все)</option>
+              {% for ch in project_chiefs %}
+                <option value="{{ ch }}" {% if project_chief == ch %}selected{% endif %}>{{ ch }}</option>
+              {% endfor %}
+            </select>
+          {% endif %}
+        </div>
+        <div>
+          <label class="label" for="report-contract-number">Номер договора</label>
+          <select id="report-contract-number" name="contract_number">
+            <option value="" {% if not contract_number %}selected{% endif %}>(все)</option>
+            {% for cn in contract_numbers|default([], true) %}
+              <option value="{{ cn|e }}" {% if contract_number == cn %}selected{% endif %}>{{ cn }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+      {% endif %}
 
       {% if report_type == 'gant' %}
         <div class="stack-mt">
@@ -177,6 +212,85 @@
             </div>
           </details>
         {% endfor %}
+      {% endif %}
+    </div>
+  {% endif %}
+
+  {% if report_type == 'exec' %}
+    <div class="box">
+      <h3 class="section-title">Выполнение задач</h3>
+      {% if exec_workers|length == 0 %}
+        <div class="muted">Нет данных для выбранного периода.</div>
+      {% else %}
+        <ul class="exec-legend" aria-label="Светофор статусов задач">
+          <li><span class="exec-swatch exec-swatch--green" aria-hidden="true"></span> более 3 раб. дней до срока (План / В работе)</li>
+          <li><span class="exec-swatch exec-swatch--yellow" aria-hidden="true"></span> 2–3 раб. дня до срока (План / В работе)</li>
+          <li><span class="exec-swatch exec-swatch--red" aria-hidden="true"></span> 1 раб. день и меньше (План / В работе)</li>
+          <li><span class="exec-swatch exec-swatch--gray" aria-hidden="true"></span> Выполнено / Отмена</li>
+        </ul>
+        <p class="table-scroll-hint table-scroll-hint--mobile-only">Таблицу можно прокручивать по горизонтали.</p>
+        <div class="table-wrap table-wrap--sticky">
+          <table class="table is-hoverable is-fullwidth exec-table" id="exec-report-table">
+            <thead>
+              <tr>
+                <th>Пользователь / проект / задача</th>
+                <th>Статус</th>
+                <th>Начало</th>
+                <th>Окончание</th>
+                <th class="num">Дней</th>
+                <th class="num">Выполнено</th>
+                <th class="num">Всего</th>
+                <th class="num">%</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for w in exec_workers %}
+                {% set wid = 'w' ~ loop.index %}
+                <tr class="exec-row exec-row--worker" data-exec-id="{{ wid }}">
+                  <td>
+                    <button type="button" class="exec-toggle" aria-expanded="true" aria-label="Свернуть или развернуть {{ w.worker_name }}">▼</button>
+                    <span class="exec-name" title="{{ w.full_name or w.worker_name }}">{{ w.worker_name }}</span>
+                  </td>
+                  <td></td>
+                  <td></td>
+                  <td></td>
+                  <td class="num">{{ w.days }}</td>
+                  <td class="num">{{ w.done }}</td>
+                  <td class="num">{{ w.total }}</td>
+                  <td class="num">{% if w.pct is none %}—{% else %}{{ '%.0f'|format(w.pct) }}%{% endif %}</td>
+                </tr>
+                {% for p in w.projects %}
+                  {% set pid = wid ~ '-p' ~ loop.index %}
+                  <tr class="exec-row exec-row--project" data-exec-id="{{ pid }}" data-exec-parent="{{ wid }}">
+                    <td>
+                      <button type="button" class="exec-toggle" aria-expanded="true" aria-label="Свернуть или развернуть проект {{ p.contract_number }}">▼</button>
+                      <span class="exec-name">{{ p.contract_number }}{% if p.etap_number %} · этап {{ p.etap_number }}{% endif %}</span>
+                    </td>
+                    <td>{{ p.status or '—' }}</td>
+                    <td>{{ p.start or '—' }}</td>
+                    <td>{{ p.end or '—' }}</td>
+                    <td class="num">{{ p.days }}</td>
+                    <td class="num">{{ p.done }}</td>
+                    <td class="num">{{ p.total }}</td>
+                    <td class="num">{% if p.pct is none %}—{% else %}{{ '%.0f'|format(p.pct) }}%{% endif %}</td>
+                  </tr>
+                  {% for t in p.tasks %}
+                    <tr class="exec-row exec-row--task{% if t.light %} exec-tl-{{ t.light }}{% endif %}" data-exec-parent="{{ pid }}">
+                      <td><span class="exec-name">{{ t.task_name }}</span></td>
+                      <td>{{ t.status or '—' }}</td>
+                      <td>{{ t.start or '—' }}</td>
+                      <td>{{ t.end or '—' }}</td>
+                      <td class="num">{{ t.days }}</td>
+                      <td class="num">{{ t.done }}</td>
+                      <td class="num">{{ t.total }}</td>
+                      <td class="num">{% if t.pct is none %}—{% else %}{{ '%.0f'|format(t.pct) }}%{% endif %}</td>
+                    </tr>
+                  {% endfor %}
+                {% endfor %}
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
       {% endif %}
     </div>
   {% endif %}
@@ -302,6 +416,41 @@
           }
           if (form) form.submit();
         });
+      });
+    })();
+  </script>
+  {% endif %}
+  {% if report_type == 'exec' %}
+  <script>
+    (function () {
+      var table = document.getElementById('exec-report-table');
+      if (!table) return;
+
+      function hideSubtree(id, hide) {
+        table.querySelectorAll('[data-exec-parent="' + id + '"]').forEach(function (row) {
+          row.hidden = hide;
+          var btn = row.querySelector('.exec-toggle');
+          if (btn) {
+            btn.setAttribute('aria-expanded', hide ? 'false' : 'true');
+            btn.textContent = hide ? '▶' : '▼';
+          }
+          var cid = row.getAttribute('data-exec-id');
+          if (cid) hideSubtree(cid, hide);
+        });
+      }
+
+      table.addEventListener('click', function (e) {
+        var btn = e.target.closest('.exec-toggle');
+        if (!btn || !table.contains(btn)) return;
+        var row = btn.closest('tr');
+        if (!row) return;
+        var id = row.getAttribute('data-exec-id');
+        if (!id) return;
+        var open = btn.getAttribute('aria-expanded') !== 'false';
+        var next = !open;
+        btn.setAttribute('aria-expanded', next ? 'true' : 'false');
+        btn.textContent = next ? '▼' : '▶';
+        hideSubtree(id, !next);
       });
     })();
   </script>

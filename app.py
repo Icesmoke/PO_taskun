@@ -32,6 +32,7 @@ from db import (
     fetch_project_tasks,
     fetch_tasks_date_bounds_for_reports,
     fetch_tasks_intervals_for_reports,
+    fetch_tasks_for_execution_report,
     fetch_report_contract_kinds,
     fetch_report_contract_numbers,
     fetch_report_project_chiefs,
@@ -70,6 +71,7 @@ from utils import (
 )
 from reports_service import (
     TaskInterval,
+    build_execution_report,
     build_gantt_model,
     build_utilisation_model,
     daterange_inclusive,
@@ -299,9 +301,6 @@ def create_app() -> Flask:
                 period_end = None
 
         sort_by = (request.args.get("sort_by") or "").strip() or None
-        sort_dir = (request.args.get("sort_dir") or "asc").strip().lower()
-        if sort_dir not in {"asc", "desc"}:
-            sort_dir = "asc"
         allowed_sort = {
             "contract_number",
             "project_chief",
@@ -313,6 +312,14 @@ def create_app() -> Flask:
         }
         if sort_by not in allowed_sort:
             sort_by = None
+        if sort_by is None:
+            sort_by = "plan_end_date"
+            default_sort_dir = "desc"
+        else:
+            default_sort_dir = "asc"
+        sort_dir = (request.args.get("sort_dir") or default_sort_dir).strip().lower()
+        if sort_dir not in {"asc", "desc"}:
+            sort_dir = default_sort_dir
 
         # Options for filters — from role-visible projects without UI filters.
         visible_for_filters = fetch_projects(role=role, current_short_name=short_name)
@@ -631,26 +638,32 @@ def create_app() -> Flask:
             return redir
 
         role = current_role()
-        if role not in {"Директор", "Руководитель проекта"}:
-            flash("Панель отчетов не доступна.", "error")
-            return redirect(url_for("projects"))
 
         # Type of report
-        report_type = request.args.get("report_type", "gant").strip().lower()
-        if report_type not in {"gant", "util", "econ"}:
-            report_type = "gant"
+        report_type = request.args.get("report_type", "").strip().lower()
+        if report_type not in {"gant", "util", "econ", "exec"}:
+            report_type = "gant" if role in {"Директор", "Руководитель проекта"} else "exec"
 
         is_director = role == "Директор"
+        if report_type == "gant" and role not in {"Директор", "Руководитель проекта"}:
+            return redirect(url_for("reports", report_type="exec"))
         if report_type == "util" and not is_director:
             flash("Отчёт по утилизации не доступен.", "error")
-            return redirect(url_for("reports", report_type="gant"))
+            fallback = "gant" if role == "Руководитель проекта" else "exec"
+            return redirect(url_for("reports", report_type=fallback))
+        if report_type == "econ" and not is_director:
+            flash("Отчёт «Экономика проектов» доступен только Директору.", "error")
+            fallback = "gant" if role == "Руководитель проекта" else "exec"
+            return redirect(url_for("reports", report_type=fallback))
 
         # Filters
         contract_kind = request.args.get("contract_kind", "").strip() or None
         project_chief = request.args.get("project_chief", "").strip() or None
         contract_number = request.args.get("contract_number", "").strip() or None
-        if report_type != "gant":
+        if report_type not in {"gant", "exec"}:
             contract_number = None
+        if report_type == "exec":
+            contract_kind = None
         sort_by = request.args.get("sort_by", "").strip().lower() or None
         sort_dir = request.args.get("sort_dir", "desc").strip().lower()
         if sort_dir not in {"asc", "desc"}:
@@ -663,12 +676,12 @@ def create_app() -> Flask:
         date_start_raw = request.args.get("date_start", "").strip()
         date_end_raw = request.args.get("date_end", "").strip()
 
-        # Defaults from DB
+        # Defaults from DB (task date range in visible scope)
         default_min_iso, default_max_iso = fetch_tasks_date_bounds_for_reports(
             worker_role=role,
             current_short_name=current_short_name(),
             contract_kind=contract_kind,
-            project_chief=project_chief,
+            project_chief=effective_project_chief if report_type == "exec" else project_chief,
             contract_number=contract_number,
         )
 
@@ -718,34 +731,54 @@ def create_app() -> Flask:
         end_iso = date_end.isoformat()
 
         # Fetch task intervals (overlap-filtered in SQL)
-        rows = fetch_tasks_intervals_for_reports(
-            start_date_iso=start_iso,
-            end_date_iso=end_iso,
-            worker_role=role,
-            current_short_name=current_short_name(),
-            contract_kind=contract_kind,
-            project_chief=effective_project_chief,
-            contract_number=contract_number,
-        )
-
-        # Convert to domain model and clip to selected date range
         intervals: List[TaskInterval] = []
-        for r in rows:
-            s_raw = r["task_start_date"]
-            e_raw = r["task_end_date"]
-            s = dt.date.fromisoformat(s_raw)
-            e = dt.date.fromisoformat(e_raw)
-            s2 = max(s, date_start)
-            e2 = min(e, date_end)
-            if s2 <= e2:
-                intervals.append(
-                    TaskInterval(
-                        worker_name=r["worker_name"],
-                        contract_number=r["contract_number"],
-                        start_date=s2,
-                        end_date=e2,
+        exec_workers: List[Dict[str, Any]] = []
+        if report_type == "exec":
+            exec_rows = fetch_tasks_for_execution_report(
+                start_date_iso=start_iso,
+                end_date_iso=end_iso,
+                worker_role=role,
+                current_short_name=current_short_name(),
+                project_chief=effective_project_chief,
+                contract_number=contract_number,
+            )
+            enabled_names = {
+                str(w["short_name"])
+                for w in fetch_workers(enabled_only=True)
+                if w.get("short_name")
+            }
+            exec_workers = build_execution_report(
+                exec_rows,
+                today=dt.date.today(),
+                enabled_short_names=enabled_names,
+            )
+        elif report_type in {"gant", "util"}:
+            rows = fetch_tasks_intervals_for_reports(
+                start_date_iso=start_iso,
+                end_date_iso=end_iso,
+                worker_role=role,
+                current_short_name=current_short_name(),
+                contract_kind=contract_kind,
+                project_chief=effective_project_chief,
+                contract_number=contract_number,
+            )
+
+            for r in rows:
+                s_raw = r["task_start_date"]
+                e_raw = r["task_end_date"]
+                s = dt.date.fromisoformat(s_raw)
+                e = dt.date.fromisoformat(e_raw)
+                s2 = max(s, date_start)
+                e2 = min(e, date_end)
+                if s2 <= e2:
+                    intervals.append(
+                        TaskInterval(
+                            worker_name=r["worker_name"],
+                            contract_number=r["contract_number"],
+                            start_date=s2,
+                            end_date=e2,
+                        )
                     )
-                )
 
         # Filter choices
         contract_kinds = fetch_report_contract_kinds(role, current_short_name())
@@ -796,7 +829,7 @@ def create_app() -> Flask:
                     util_rate_by_employee[w] = 100.0 * days_on_projects / util_period_workdays
                 else:
                     util_rate_by_employee[w] = 0.0
-        else:
+        elif report_type == "econ":
             cal = calendar_for_period(date_start, date_end)
 
             revenue_rows = fetch_economy_revenue_rows(
@@ -921,6 +954,7 @@ def create_app() -> Flask:
             economy_rows=economy_rows,
             sort_by=sort_by or "",
             sort_dir=sort_dir,
+            exec_workers=exec_workers,
         )
 
     @app.get("/data_input")
