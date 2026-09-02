@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <div class="box kb-page">
+    <p class="kb-back">
+      <a href="{{ url_for('knowledge') }}">← База знаний</a>
+    </p>
+    <h1 class="page-title">Регламент выполнения договоров с кодом 600</h1>
+    <div class="kb-article">
+      {% include "knowledge/_reglament_600_body.html" %}
+    </div>
+  </div>
+{% endblock %}

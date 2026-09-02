@@ -49,6 +49,7 @@
     {% set nav_data = ep.startswith('data_input') %}
     {% set nav_users = ep == 'rights_user_panel' %}
     {% set nav_profile = ep == 'profile' %}
+    {% set nav_knowledge = ep in ['knowledge', 'knowledge_reglament_600'] %}
 
     {% if current_user %}
       <div class="app-shell">
@@ -86,6 +87,9 @@
                 </li>
               {% endif %}
             {% endif %}
+            <li>
+              <a class="{% if nav_knowledge %}is-active{% endif %}" href="{{ url_for('knowledge') }}">База знаний</a>
+            </li>
             <li>
               <a class="{% if nav_profile %}is-active{% endif %}" href="{{ url_for('profile') }}">Профиль</a>
             </li>

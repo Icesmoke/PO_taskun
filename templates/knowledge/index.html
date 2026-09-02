@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <div class="box po-mb">
+    <h2 class="page-title">База знаний</h2>
+    <p class="muted">Регламенты и справочные материалы по выполнению проектов.</p>
+    <div class="kb-list">
+      <a class="kb-list__item" href="{{ url_for('knowledge_reglament_600') }}">
+        <div class="kb-list__title">Регламент выполнения договоров с кодом 600</div>
+        <div class="kb-list__meta">Договоры 602, 603, 604 — порядок выполнения консалтинговых услуг</div>
+      </a>
+    </div>
+  </div>
+{% endblock %}
