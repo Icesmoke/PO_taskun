@@ -266,6 +266,28 @@ def create_app() -> Flask:
         # Stage 1: photo absent -> placeholder
         return render_template("profile.html", user=user, arm=arm_for_role(user["worker_role"]))
 
+    @app.get("/knowledge")
+    def knowledge():
+        redir = require_login()
+        if redir:
+            return redir
+        return render_template(
+            "knowledge/index.html",
+            title="База знаний",
+            arm=arm_for_role(current_role()),
+        )
+
+    @app.get("/knowledge/reglament-600")
+    def knowledge_reglament_600():
+        redir = require_login()
+        if redir:
+            return redir
+        return render_template(
+            "knowledge/reglament_600.html",
+            title="Регламент выполнения договоров с кодом 600",
+            arm=arm_for_role(current_role()),
+        )
+
     @app.get("/projects")
     def projects():
         redir = require_login()
