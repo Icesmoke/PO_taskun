@@ -3,6 +3,40 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from config import DB_PATH
 
+CHIEF_ROLE = "Руководитель проекта"
+
+
+def _worker_assigned_to_short_sql(task_alias: str) -> str:
+    """Match tasks.worker_name to a worker by short_name or full_name. Binds short_name twice."""
+    return (
+        f"(TRIM({task_alias}.worker_name) = TRIM(?)"
+        f" OR TRIM({task_alias}.worker_name) = ("
+        f"SELECT TRIM(full_name) FROM workers w0"
+        f" WHERE TRIM(w0.short_name) = TRIM(?) LIMIT 1"
+        f"))"
+    )
+
+
+def _chief_visible_project_sql(projects_alias: str) -> str:
+    """
+    Project chief sees rows they lead and contracts where they have assigned tasks.
+    Binds current_short_name three times.
+    """
+    return (
+        f"("
+        f"{projects_alias}.project_chief = ?"
+        f" OR EXISTS ("
+        f"SELECT 1 FROM tasks t_vis"
+        f" WHERE t_vis.contract_number = {projects_alias}.contract_number"
+        f" AND {_worker_assigned_to_short_sql('t_vis')}"
+        f")"
+        f")"
+    )
+
+
+def _bind_short_name_thrice(short_name: str) -> Tuple[str, str, str]:
+    return (short_name, short_name, short_name)
+
 
 def get_connection() -> sqlite3.Connection:
     # Use detect_types for better parsing, but still normalize in utils.
@@ -359,7 +393,7 @@ def fetch_projects(
     """
     Return projects list for project_panel.
     - Director: all rows
-    - Project chief: where project_chief == short_name
+    - Project chief: projects they lead, plus contracts with tasks assigned to them
     - Consultant: where tasks exist for this worker (tasks table)
     """
     where: List[str] = []
@@ -367,9 +401,9 @@ def fetch_projects(
 
     # Visibility by role
     # (match worker_role stored in DB)
-    if role == "Руководитель проекта":
-        where.append("project_chief = ?")
-        params.append(current_short_name)
+    if role == CHIEF_ROLE:
+        where.append(_chief_visible_project_sql("projects"))
+        params.extend(_bind_short_name_thrice(current_short_name))
     elif role == "Консультант":
         where.append(
             "EXISTS (SELECT 1 FROM tasks t WHERE t.contract_number = projects.contract_number AND t.worker_name = ?)"
@@ -636,17 +670,17 @@ def disable_worker(workers_id: int) -> None:
 def fetch_report_contract_numbers(worker_role: str, current_short_name: str) -> List[str]:
     """Distinct contract numbers visible in reports (same scope as contract_kind filter)."""
     with get_connection() as con:
-        if worker_role == "Руководитель проекта":
+        if worker_role == CHIEF_ROLE:
             rows = con.execute(
-                """
+                f"""
                 SELECT DISTINCT contract_number
                 FROM projects
-                WHERE project_chief = ?
+                WHERE {_chief_visible_project_sql("projects")}
                   AND contract_number IS NOT NULL
                   AND TRIM(contract_number) <> ''
                 ORDER BY contract_number
                 """,
-                (current_short_name,),
+                _bind_short_name_thrice(current_short_name),
             ).fetchall()
         elif worker_role == "Консультант":
             rows = con.execute(
@@ -682,10 +716,16 @@ def fetch_report_contract_numbers(worker_role: str, current_short_name: str) -> 
 
 def fetch_report_contract_kinds(worker_role: str, current_short_name: str) -> List[str]:
     with get_connection() as con:
-        if worker_role == "Руководитель проекта":
+        if worker_role == CHIEF_ROLE:
             rows = con.execute(
-                "SELECT DISTINCT contract_kind FROM projects WHERE project_chief = ? AND contract_kind IS NOT NULL ORDER BY contract_kind",
-                (current_short_name,),
+                f"""
+                SELECT DISTINCT contract_kind
+                FROM projects
+                WHERE {_chief_visible_project_sql("projects")}
+                  AND contract_kind IS NOT NULL
+                ORDER BY contract_kind
+                """,
+                _bind_short_name_thrice(current_short_name),
             ).fetchall()
         else:
             rows = con.execute(
@@ -696,8 +736,19 @@ def fetch_report_contract_kinds(worker_role: str, current_short_name: str) -> Li
 
 def fetch_report_project_chiefs(worker_role: str, current_short_name: str) -> List[str]:
     with get_connection() as con:
-        if worker_role == "Руководитель проекта":
-            return [current_short_name]
+        if worker_role == CHIEF_ROLE:
+            rows = con.execute(
+                f"""
+                SELECT DISTINCT project_chief
+                FROM projects
+                WHERE {_chief_visible_project_sql("projects")}
+                  AND project_chief IS NOT NULL
+                  AND TRIM(project_chief) <> ''
+                ORDER BY project_chief
+                """,
+                _bind_short_name_thrice(current_short_name),
+            ).fetchall()
+            return [r[0] for r in rows]
         if worker_role == "Консультант":
             rows = con.execute(
                 """
@@ -736,9 +787,9 @@ def _execution_role_filters(
 ) -> Tuple[List[str], List[Any]]:
     where: List[str] = []
     params: List[Any] = []
-    if worker_role == "Руководитель проекта":
-        where.append("p.project_chief = ?")
-        params.append(current_short_name)
+    if worker_role == CHIEF_ROLE:
+        where.append(_chief_visible_project_sql("p"))
+        params.extend(_bind_short_name_thrice(current_short_name))
     elif worker_role == "Консультант":
         where.append(
             "("
@@ -749,7 +800,7 @@ def _execution_role_filters(
             ")"
         )
         params.extend([current_short_name, current_short_name])
-    if project_chief and worker_role != "Руководитель проекта":
+    if project_chief:
         where.append("p.project_chief = ?")
         params.append(project_chief)
     if contract_number:
@@ -825,9 +876,9 @@ def fetch_tasks_intervals_for_reports(
 ) -> List[Dict[str, Any]]:
     """
     Returns task intervals clipped to [start_date_iso, end_date_iso] and filtered by:
-    - role visibility (chief sees only their projects)
+    - role visibility (chief: led projects plus contracts with assigned tasks)
     - contract_kind (optional)
-    - project_chief (optional, but for chief it's forced by role)
+    - project_chief (optional)
     - contract_number (optional)
     """
     with get_connection() as con:
@@ -841,16 +892,15 @@ def fetch_tasks_intervals_for_reports(
         params.append(start_date_iso)
 
         # role visibility
-        if worker_role == "Руководитель проекта":
-            where.append("p.project_chief = ?")
-            params.append(current_short_name)
+        if worker_role == CHIEF_ROLE:
+            where.append(_chief_visible_project_sql("p"))
+            params.extend(_bind_short_name_thrice(current_short_name))
 
         if contract_kind:
             where.append("p.contract_kind = ?")
             params.append(contract_kind)
 
-        # director can filter by project chief
-        if project_chief and worker_role != "Руководитель проекта":
+        if project_chief:
             where.append("p.project_chief = ?")
             params.append(project_chief)
 
@@ -895,9 +945,9 @@ def fetch_tasks_date_bounds_for_reports(
         params: List[Any] = []
 
         # role visibility
-        if worker_role == "Руководитель проекта":
-            where.append("p.project_chief = ?")
-            params.append(current_short_name)
+        if worker_role == CHIEF_ROLE:
+            where.append(_chief_visible_project_sql("p"))
+            params.extend(_bind_short_name_thrice(current_short_name))
         elif worker_role == "Консультант":
             where.append(
                 "("
@@ -913,7 +963,7 @@ def fetch_tasks_date_bounds_for_reports(
             where.append("p.contract_kind = ?")
             params.append(contract_kind)
 
-        if project_chief and worker_role != "Руководитель проекта":
+        if project_chief:
             where.append("p.project_chief = ?")
             params.append(project_chief)
 
@@ -972,15 +1022,15 @@ def fetch_economy_report_rows(
         params_scope.append(start_date_iso)
 
         # role visibility by projects
-        if worker_role == "Руководитель проекта":
-            where_scope.append("p.project_chief = ?")
-            params_scope.append(current_short_name)
+        if worker_role == CHIEF_ROLE:
+            where_scope.append(_chief_visible_project_sql("p"))
+            params_scope.extend(_bind_short_name_thrice(current_short_name))
 
         if contract_kind:
             where_scope.append("p.contract_kind = ?")
             params_scope.append(contract_kind)
 
-        if project_chief and worker_role != "Руководитель проекта":
+        if project_chief:
             where_scope.append("p.project_chief = ?")
             params_scope.append(project_chief)
 
@@ -1083,15 +1133,15 @@ def fetch_economy_revenue_rows(
         where_scope.append("date(t.task_end_date) >= date(?)")
         params_scope.append(start_date_iso)
 
-        if worker_role == "Руководитель проекта":
-            where_scope.append("p.project_chief = ?")
-            params_scope.append(current_short_name)
+        if worker_role == CHIEF_ROLE:
+            where_scope.append(_chief_visible_project_sql("p"))
+            params_scope.extend(_bind_short_name_thrice(current_short_name))
 
         if contract_kind:
             where_scope.append("p.contract_kind = ?")
             params_scope.append(contract_kind)
 
-        if project_chief and worker_role != "Руководитель проекта":
+        if project_chief:
             where_scope.append("p.project_chief = ?")
             params_scope.append(project_chief)
 
@@ -1150,15 +1200,15 @@ def fetch_done_tasks_for_economy(
         where.append("date(t.task_end_date) >= date(?)")
         params.append(start_date_iso)
 
-        if worker_role == "Руководитель проекта":
-            where.append("p.project_chief = ?")
-            params.append(current_short_name)
+        if worker_role == CHIEF_ROLE:
+            where.append(_chief_visible_project_sql("p"))
+            params.extend(_bind_short_name_thrice(current_short_name))
 
         if contract_kind:
             where.append("p.contract_kind = ?")
             params.append(contract_kind)
 
-        if project_chief and worker_role != "Руководитель проекта":
+        if project_chief:
             where.append("p.project_chief = ?")
             params.append(project_chief)
 

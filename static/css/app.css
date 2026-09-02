@@ -911,17 +911,65 @@ html[data-theme="dark"] .flatpickr-calendar {
 html[data-theme="dark"] .flatpickr-months .flatpickr-month,
 html[data-theme="dark"] .flatpickr-weekdays,
 html[data-theme="dark"] span.flatpickr-weekday,
-html[data-theme="dark"] .flatpickr-current-month .flatpickr-monthDropdown-months {
+html[data-theme="dark"] .flatpickr-current-month .flatpickr-monthDropdown-months,
+html[data-theme="dark"] .flatpickr-current-month input.cur-year {
   background: var(--color-surface);
   color: var(--color-text);
 }
 
-html[data-theme="dark"] .flatpickr-day:hover {
+html[data-theme="dark"] .flatpickr-months .flatpickr-prev-month,
+html[data-theme="dark"] .flatpickr-months .flatpickr-next-month {
+  color: var(--color-text);
+  fill: var(--color-text);
+}
+
+html[data-theme="dark"] .flatpickr-months .flatpickr-prev-month svg,
+html[data-theme="dark"] .flatpickr-months .flatpickr-next-month svg {
+  fill: var(--color-text);
+}
+
+/* Цифры дней: flatpickr.min.css грузится после app.css и задаёт #393939 */
+html[data-theme="dark"] .flatpickr-day {
+  color: #f9fafb;
+  font-weight: 600;
+}
+
+html[data-theme="dark"] .flatpickr-day:hover,
+html[data-theme="dark"] .flatpickr-day:focus {
   background: var(--color-bg-alt);
+  color: #ffffff;
+}
+
+html[data-theme="dark"] .flatpickr-day.today {
+  border-color: var(--color-primary);
+  color: #f9fafb;
+  font-weight: 700;
+}
+
+html[data-theme="dark"] .flatpickr-day.selected,
+html[data-theme="dark"] .flatpickr-day.startRange,
+html[data-theme="dark"] .flatpickr-day.endRange,
+html[data-theme="dark"] .flatpickr-day.selected:hover,
+html[data-theme="dark"] .flatpickr-day.selected:focus {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: #0b1220;
+  font-weight: 700;
+}
+
+html[data-theme="dark"] .flatpickr-day.flatpickr-disabled,
+html[data-theme="dark"] .flatpickr-day.prevMonthDay,
+html[data-theme="dark"] .flatpickr-day.nextMonthDay {
+  color: #d1d5db;
+  opacity: 1;
 }
 
 html[data-theme="dark"] .numInputWrapper span {
   border-color: var(--color-border);
+}
+
+html[data-theme="dark"] .numInputWrapper span:hover {
+  border-color: var(--color-text);
 }
 
 .flex-between {

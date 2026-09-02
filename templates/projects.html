@@ -198,7 +198,7 @@
                   <span class="project-row__meta-sep">·</span>
                   <span>Исп.: {{ p.executant_name }}</span>
                 {% endif %}
-                {% if role == 'Директор' and p.project_chief %}
+                {% if role in ['Директор', 'Руководитель проекта'] and p.project_chief %}
                   <span class="project-row__meta-sep">·</span>
                   <span>РП: {{ p.project_chief }}</span>
                 {% endif %}
