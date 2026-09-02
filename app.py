@@ -639,7 +639,6 @@ def create_app() -> Flask:
 
         role = current_role()
 
-        # Type of report
         report_type = request.args.get("report_type", "").strip().lower()
         if report_type not in {"gant", "util", "econ", "exec"}:
             report_type = "gant" if role in {"Директор", "Руководитель проекта"} else "exec"
@@ -656,7 +655,6 @@ def create_app() -> Flask:
             fallback = "gant" if role == "Руководитель проекта" else "exec"
             return redirect(url_for("reports", report_type=fallback))
 
-        # Filters
         contract_kind = request.args.get("contract_kind", "").strip() or None
         project_chief = request.args.get("project_chief", "").strip() or None
         contract_number = request.args.get("contract_number", "").strip() or None
@@ -669,10 +667,6 @@ def create_app() -> Flask:
         if sort_dir not in {"asc", "desc"}:
             sort_dir = "desc"
 
-        # Chief role is forced to their project chief filter
-        is_chief = role == "Руководитель проекта"
-        effective_project_chief = current_short_name() if is_chief else project_chief
-
         date_start_raw = request.args.get("date_start", "").strip()
         date_end_raw = request.args.get("date_end", "").strip()
 
@@ -681,7 +675,7 @@ def create_app() -> Flask:
             worker_role=role,
             current_short_name=current_short_name(),
             contract_kind=contract_kind,
-            project_chief=effective_project_chief if report_type == "exec" else project_chief,
+            project_chief=project_chief,
             contract_number=contract_number,
         )
 
@@ -739,7 +733,7 @@ def create_app() -> Flask:
                 end_date_iso=end_iso,
                 worker_role=role,
                 current_short_name=current_short_name(),
-                project_chief=effective_project_chief,
+                project_chief=project_chief,
                 contract_number=contract_number,
             )
             enabled_names = {
@@ -759,7 +753,7 @@ def create_app() -> Flask:
                 worker_role=role,
                 current_short_name=current_short_name(),
                 contract_kind=contract_kind,
-                project_chief=effective_project_chief,
+                project_chief=project_chief,
                 contract_number=contract_number,
             )
 
@@ -838,7 +832,7 @@ def create_app() -> Flask:
                 worker_role=role,
                 current_short_name=current_short_name(),
                 contract_kind=contract_kind,
-                project_chief=effective_project_chief,
+                project_chief=project_chief,
             )
             done_tasks = fetch_done_tasks_for_economy(
                 start_date_iso=start_iso,
@@ -846,7 +840,7 @@ def create_app() -> Flask:
                 worker_role=role,
                 current_short_name=current_short_name(),
                 contract_kind=contract_kind,
-                project_chief=effective_project_chief,
+                project_chief=project_chief,
                 done_status_name=done_status_name,
             )
 
@@ -933,9 +927,8 @@ def create_app() -> Flask:
             date_end=date_end_raw,
             contract_kind=contract_kind,
             contract_number=contract_number,
-            project_chief=effective_project_chief,
+            project_chief=project_chief,
             is_director=is_director,
-            is_chief=is_chief,
             contract_kinds=contract_kinds,
             contract_numbers=contract_numbers,
             project_chiefs=project_chiefs,

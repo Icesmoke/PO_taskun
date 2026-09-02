@@ -65,32 +65,24 @@
         </div>
         <div>
           <label class="label" for="report-project-chief">Руководитель проекта</label>
-          {% if is_chief %}
-            <input id="report-project-chief" type="text" value="{{ project_chief }}" disabled />
-          {% else %}
-            <select id="report-project-chief" name="project_chief">
-              <option value="" {% if not project_chief %}selected{% endif %}>(все)</option>
-              {% for ch in project_chiefs %}
-                <option value="{{ ch }}" {% if project_chief == ch %}selected{% endif %}>{{ ch }}</option>
-              {% endfor %}
-            </select>
-          {% endif %}
+          <select id="report-project-chief" name="project_chief">
+            <option value="" {% if not project_chief %}selected{% endif %}>(все)</option>
+            {% for ch in project_chiefs %}
+              <option value="{{ ch }}" {% if project_chief == ch %}selected{% endif %}>{{ ch }}</option>
+            {% endfor %}
+          </select>
         </div>
       </div>
       {% else %}
       <div class="grid-2 grid-2--mt">
         <div>
           <label class="label" for="report-project-chief">Руководитель проекта</label>
-          {% if is_chief %}
-            <input id="report-project-chief" type="text" value="{{ project_chief }}" disabled />
-          {% else %}
-            <select id="report-project-chief" name="project_chief">
-              <option value="" {% if not project_chief %}selected{% endif %}>(все)</option>
-              {% for ch in project_chiefs %}
-                <option value="{{ ch }}" {% if project_chief == ch %}selected{% endif %}>{{ ch }}</option>
-              {% endfor %}
-            </select>
-          {% endif %}
+          <select id="report-project-chief" name="project_chief">
+            <option value="" {% if not project_chief %}selected{% endif %}>(все)</option>
+            {% for ch in project_chiefs %}
+              <option value="{{ ch }}" {% if project_chief == ch %}selected{% endif %}>{{ ch }}</option>
+            {% endfor %}
+          </select>
         </div>
         <div>
           <label class="label" for="report-contract-number">Номер договора</label>
