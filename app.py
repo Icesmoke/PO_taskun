@@ -56,6 +56,7 @@ from db import (
     delete_bonus_by_rid,
     delete_voyage_by_rid,
     delete_contracter_by_rid,
+    executor_has_overlapping_assignment,
     replace_project_tasks,
     update_project_fields,
     update_bonus_by_rid,
@@ -1520,6 +1521,14 @@ def create_app() -> Flask:
             t["task_start_date"] = normalize_sqlite_timestamp_date(start_raw) if start_raw else ""
             t["task_end_date"] = normalize_sqlite_timestamp_date(end_raw) if end_raw else ""
             tasks.append(t)
+
+        if executor_has_overlapping_assignment(
+            contract_number=contract_number,
+            etap_number=etap_number,
+            tasks=tasks,
+        ):
+            flash("Исполнитель имеет задачу в этом периоде времени", "error")
+            return redirect(card_url)
 
         replace_project_tasks(contract_number, etap_number, tasks)
 
