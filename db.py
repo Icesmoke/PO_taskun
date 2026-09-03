@@ -575,6 +575,113 @@ def update_project_fields(
         return cur.rowcount > 0
 
 
+def _iso_date_ymd(value: object) -> Optional[str]:
+    s = str(value or "").strip()
+    if len(s) >= 10 and s[4] == "-" and s[7] == "-":
+        return s[:10]
+    return None
+
+
+def _periods_overlap(start_a: str, end_a: str, start_b: str, end_b: str) -> bool:
+    return start_a <= end_b and start_b <= end_a
+
+
+def _worker_canonical_map(con: sqlite3.Connection) -> Dict[str, str]:
+    mapping: Dict[str, str] = {}
+    rows = con.execute(
+        "SELECT TRIM(short_name) AS short_name, TRIM(full_name) AS full_name FROM workers"
+    ).fetchall()
+    for row in rows:
+        short_name = (row["short_name"] or "").strip()
+        full_name = (row["full_name"] or "").strip()
+        canonical = short_name or full_name
+        if not canonical:
+            continue
+        if short_name:
+            mapping[short_name] = canonical
+        if full_name:
+            mapping[full_name] = canonical
+    return mapping
+
+
+def _canonical_worker(mapping: Dict[str, str], worker_name: str) -> str:
+    name = worker_name.strip()
+    return mapping.get(name, name)
+
+
+def _scheduled_task_periods(tasks: Sequence[Dict[str, Any]], mapping: Dict[str, str]) -> List[Tuple[str, str, str]]:
+    periods: List[Tuple[str, str, str]] = []
+    for t in tasks:
+        worker_name = str(t.get("worker_name") or "").strip()
+        start = _iso_date_ymd(t.get("task_start_date"))
+        end = _iso_date_ymd(t.get("task_end_date"))
+        if not worker_name or not start or not end:
+            continue
+        periods.append((_canonical_worker(mapping, worker_name), start, end))
+    return periods
+
+
+def executor_has_overlapping_assignment(
+    *,
+    contract_number: str,
+    etap_number: str,
+    tasks: Sequence[Dict[str, Any]],
+) -> bool:
+    """
+    True if the executor already has a task whose dates overlap the given period,
+    either among the tasks being saved or in another project/stage.
+    """
+    with get_connection() as con:
+        mapping = _worker_canonical_map(con)
+        incoming = _scheduled_task_periods(tasks, mapping)
+        if not incoming:
+            return False
+
+        for i, (worker_a, start_a, end_a) in enumerate(incoming):
+            for worker_b, start_b, end_b in incoming[i + 1 :]:
+                if worker_a == worker_b and _periods_overlap(start_a, end_a, start_b, end_b):
+                    return True
+
+        worker_keys = {p[0] for p in incoming}
+        name_list: List[str] = []
+        for stored_name, canonical in mapping.items():
+            if canonical in worker_keys:
+                name_list.append(stored_name)
+        for key in worker_keys:
+            if key not in name_list:
+                name_list.append(key)
+
+        placeholders = ",".join(["?"] * len(name_list))
+        rows = con.execute(
+            f"""
+            SELECT TRIM(worker_name) AS worker_name,
+                   date(task_start_date) AS task_start_date,
+                   date(task_end_date) AS task_end_date
+            FROM tasks
+            WHERE TRIM(COALESCE(worker_name, '')) IN ({placeholders})
+              AND NOT (contract_number = ? AND etap_number = ?)
+              AND COALESCE(task_start_date, '') != ''
+              AND COALESCE(task_end_date, '') != ''
+            """,
+            [*name_list, contract_number, etap_number],
+        ).fetchall()
+
+        existing: List[Tuple[str, str, str]] = []
+        for row in rows:
+            start = row["task_start_date"]
+            end = row["task_end_date"]
+            worker_name = (row["worker_name"] or "").strip()
+            if not worker_name or not start or not end:
+                continue
+            existing.append((_canonical_worker(mapping, worker_name), str(start), str(end)))
+
+        for worker_a, start_a, end_a in incoming:
+            for worker_b, start_b, end_b in existing:
+                if worker_a == worker_b and _periods_overlap(start_a, end_a, start_b, end_b):
+                    return True
+        return False
+
+
 def replace_project_tasks(contract_number: str, etap_number: str, tasks: List[Dict[str, Any]]) -> None:
     con = get_connection()
     try:
