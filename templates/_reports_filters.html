@@ -1,0 +1,80 @@
+{# Единая панель фильтров для Ганта, утилизации, экономики и выполнения задач. #}
+<div class="rp-card">
+  <form method="get" action="{{ url_for('reports') }}" id="rp-form" class="rp-fbar">
+    <input type="hidden" name="report_type" value="{{ report_type }}" />
+    <input type="hidden" name="apply" value="1" />
+    <input type="hidden" name="period" id="rp-period" value="{{ period }}" />
+
+    <div class="rp-f">
+      <label class="rp-l" for="rp-ds">Период</label>
+      <div class="rp-range">
+        <input id="rp-ds" type="text" class="js-date" name="date_start" value="{{ date_start }}" placeholder="dd.mm.YYYY" />
+        <span>—</span>
+        <input id="rp-de" type="text" class="js-date" name="date_end" value="{{ date_end }}" placeholder="dd.mm.YYYY" />
+      </div>
+    </div>
+
+    {% if period_presets %}
+    <div class="rp-f">
+      <span class="rp-l">Быстрый период</span>
+      <div class="rp-seg" id="rp-presets" role="group" aria-label="Быстрый период">
+        {% for p in period_presets %}
+          <button type="button" data-preset="{{ p.key }}" class="{% if period == p.key %}is-on{% endif %}">{{ p.label }}</button>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+    {% if report_type in ['gant', 'util', 'econ'] %}
+    <div class="rp-f">
+      <label class="rp-l" for="rp-kind">Вид договора</label>
+      <select id="rp-kind" name="contract_kind">
+        <option value="" {% if not contract_kind %}selected{% endif %}>(все)</option>
+        {% for k in contract_kinds %}
+          <option value="{{ k }}" {% if contract_kind == k %}selected{% endif %}>{{ k }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    {% endif %}
+
+    <div class="rp-f">
+      <label class="rp-l" for="rp-chief">Руководитель проекта</label>
+      <select id="rp-chief" name="project_chief">
+        <option value="" {% if not project_chief %}selected{% endif %}>(все)</option>
+        {% for ch in project_chiefs %}
+          <option value="{{ ch }}" {% if project_chief == ch %}selected{% endif %}>{{ ch }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    {% if report_type in ['gant', 'exec'] %}
+    <div class="rp-f">
+      <label class="rp-l" for="rp-contract">Номер договора</label>
+      <select id="rp-contract" name="contract_number">
+        <option value="" {% if not contract_number %}selected{% endif %}>(все)</option>
+        {% for cn in contract_numbers|default([], true) %}
+          <option value="{{ cn|e }}" {% if contract_number == cn %}selected{% endif %}>{{ cn }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    {% endif %}
+
+    {% if report_type in ['gant', 'util'] %}
+    <div class="rp-f">
+      <label class="rp-l" for="rp-q">Сотрудник</label>
+      <input id="rp-q" type="search" placeholder="Поиск по ФИО" autocomplete="off" />
+    </div>
+    {% endif %}
+
+    <span class="rp-spacer"></span>
+    <div class="rp-actions">
+      <button type="submit" class="button is-primary">Применить</button>
+      <a class="button is-light" href="{{ url_for('reports', report_type=report_type, reset=1) }}" title="Сбросить фильтры и забыть сохранённые">Сбросить</a>
+      <button type="submit" name="export" value="xlsx" class="button is-light" title="Выгрузить отчёт с текущими фильтрами в Excel">⬇ Excel</button>
+    </div>
+  </form>
+  <p class="rp-note">
+    {% if report_type == 'gant' %}Для диаграммы Ганта период не более 31 дня. {% endif %}
+    Фильтры запоминаются для вашей учётной записи и применяются при следующем открытии отчёта.
+  </p>
+</div>

@@ -1,0 +1,12 @@
+{# Итоговые плитки над отчётом. Контекст: tiles = [{title, value, unit, sub, tone}] #}
+{% if tiles %}
+<div class="rp-kpis">
+  {% for t in tiles %}
+    <div class="rp-kpi{% if t.tone %} is-{{ t.tone }}{% endif %}">
+      <div class="rp-kpi__t">{{ t.title }}</div>
+      <div class="rp-kpi__v">{{ t.value }}{% if t.unit %} <span>{{ t.unit }}</span>{% endif %}</div>
+      <div class="rp-kpi__s">{{ t.sub }}</div>
+    </div>
+  {% endfor %}
+</div>
+{% endif %}

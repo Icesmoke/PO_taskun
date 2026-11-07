@@ -191,6 +191,20 @@ def task_traffic_light(status: str, remaining_workdays: int) -> str:
     return ""
 
 
+def _task_light_text(status: str, end: Optional[dt.date], remaining: int, today: dt.date) -> str:
+    """Подпись к светофору срока: «5 раб. дн.», «просрочено 3 дн.», «готово»."""
+    st = (status or "").strip().casefold()
+    if st == "выполнено":
+        return "готово"
+    if st == "отмена":
+        return "отмена"
+    if st not in _ACTIVE_TASK_STATUSES or end is None:
+        return ""
+    if end < today:
+        return f"просрочено {(today - end).days} дн."
+    return "срок сегодня" if remaining == 0 else f"{remaining} раб. дн."
+
+
 def build_execution_report(
     rows: Sequence[Dict[str, Any]],
     *,
@@ -294,6 +308,7 @@ def build_execution_report(
                 "total": 1,
                 "pct": 100.0 if is_done else 0.0,
                 "light": task_traffic_light(item["task_status"], remaining),
+                "light_text": _task_light_text(item["task_status"], item["task_end"], remaining, today),
             }
         )
         project["days"] += days
@@ -393,6 +408,7 @@ def build_planning_report(
     show_cancel: bool = False,
     find_len: Optional[int] = None,
     find_limit: Optional[int] = None,
+    show_find: bool = False,
 ) -> Dict[str, Any]:
     """
     Недельная диаграмма проектов (plan_start_date … plan_end_date) и нагрузка руководителей.
@@ -522,6 +538,9 @@ def build_planning_report(
             "clip_r": it["end"] > end,
             "label": label,
             "title": tip,
+            "start": it["start"].strftime("%d.%m.%Y"),
+            "end": it["end"].strftime("%d.%m.%Y"),
+            "status": it["status"],
         }
 
     # --- видимые проекты
@@ -538,7 +557,7 @@ def build_planning_report(
 
     shown_chiefs = [c for c in chiefs_all if not chief or c == chief]
     do_find = find_len is not None and find_limit is not None
-    find_results: List[Dict[str, Any]] = []
+    all_results: List[Dict[str, Any]] = []
     groups: List[Dict[str, Any]] = []
     for c in shown_chiefs:
         mine = sorted(
@@ -571,7 +590,7 @@ def build_planning_report(
                     length = i - run_start
                     if length >= find_len:
                         windows.append({"start_idx": run_start, "len": length})
-                        find_results.append(
+                        all_results.append(
                             {
                                 "chief": c,
                                 "start_idx": run_start,
@@ -588,7 +607,7 @@ def build_planning_report(
                 "cells": cells,
                 "count": sum(1 for it in mine if it["cls"] != "cancel"),
                 "peak": max(load[c]) if load[c] else 0,
-                "windows": windows,
+                "windows": windows if show_find else [],
                 "projects": [to_bar(it) for it in mine],
             }
         )
@@ -597,6 +616,11 @@ def build_planning_report(
         (it for it in items if is_visible(it) and (not chief or it["chief"] == chief)),
         key=lambda x: (x["start"], x["end"], x["contract"]),
     )
+    peak: Dict[str, Any] = {"n": 0, "chief": "", "from": ""}
+    for g in groups:
+        for i, cell in enumerate(g["cells"]):
+            if cell["n"] > peak["n"]:
+                peak = {"n": cell["n"], "chief": g["name"], "from": week_list[i]["monday"].strftime("%d.%m")}
     today_offset = None
     if start <= today <= end:
         today_offset = round((today - start).days / 7 + 1 / 14, 4)
@@ -612,8 +636,10 @@ def build_planning_report(
         "chiefs_all": chiefs_all,
         "kinds": sorted({it["kind"] for it in items if it["kind"]}, key=lambda s: (len(s), s)),
         "today_offset": today_offset,
-        "find_results": find_results,
-        "do_find": do_find,
+        "find_results": all_results if show_find else [],
+        "first_window": min(all_results, key=lambda r: r["start_idx"]) if all_results else None,
+        "peak": peak,
+        "do_find": show_find,
         "skipped_invalid": skipped_invalid,
         "week_px": PLAN_WEEK_PX,
         "norm": norm,

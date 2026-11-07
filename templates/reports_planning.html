@@ -12,98 +12,111 @@
   'fw_lim': F.fw_lim,
 } %}
 
-<div class="box po-mb plan-filters-box">
-  <form method="get" action="{{ url_for('reports') }}" id="plan-form">
+<div class="rp-card">
+  <form method="get" action="{{ url_for('reports') }}" id="plan-form" class="rp-fbar">
     <input type="hidden" name="report_type" value="plan" />
     <input type="hidden" name="plan_submit" value="1" />
 
-    <div class="plan-filters">
-      <div>
-        <label class="label" for="plan-start">Начало периода (неделя с понедельника)</label>
-        <input id="plan-start" type="text" class="js-date" name="plan_start" value="{{ F.start }}" placeholder="dd.mm.YYYY" />
-      </div>
-      <div>
-        <label class="label" for="plan-weeks">Ширина периода</label>
-        <select id="plan-weeks" name="plan_weeks">
-          {% for w in F.allowed_weeks %}
-            <option value="{{ w }}" {% if F.weeks == w %}selected{% endif %}>{{ w }} {{ 'неделя' if w % 10 == 1 and w % 100 != 11 else ('недели' if w % 10 in [2, 3, 4] and w % 100 not in [12, 13, 14] else 'недель') }}</option>
-          {% endfor %}
-        </select>
-      </div>
-      {% if is_director %}
-      <div>
-        <label class="label" for="plan-chief">Руководитель проекта</label>
-        <select id="plan-chief" name="project_chief">
-          <option value="" {% if not F.chief %}selected{% endif %}>(все)</option>
-          {% for ch in P.chiefs_all %}
-            <option value="{{ ch }}" {% if F.chief == ch %}selected{% endif %}>{{ ch }}</option>
-          {% endfor %}
-        </select>
-      </div>
-      {% endif %}
-      <div>
-        <label class="label" for="plan-kind">Вид договора</label>
-        <select id="plan-kind" name="contract_kind">
-          <option value="" {% if not F.kind %}selected{% endif %}>(все)</option>
-          {% for k in P.kinds %}
-            <option value="{{ k }}" {% if F.kind == k %}selected{% endif %}>{{ k }}</option>
-          {% endfor %}
-        </select>
-      </div>
-      <div class="plan-nav" role="group" aria-label="Сдвиг периода">
-        <button type="button" class="button is-light is-small js-plan-shift" data-weeks="-4">◀ 4 нед.</button>
-        <button type="button" class="button is-light is-small js-plan-shift" data-current="1">К текущей неделе</button>
-        <button type="button" class="button is-light is-small js-plan-shift" data-weeks="4">4 нед. ▶</button>
-      </div>
+    <div class="rp-f">
+      <label class="rp-l" for="plan-start">Начало периода (неделя с понедельника)</label>
+      <input id="plan-start" type="text" class="js-date" name="plan_start" value="{{ F.start }}" placeholder="dd.mm.YYYY" />
     </div>
-
-    <div class="plan-checks">
-      <label><input type="checkbox" name="show_done" value="1" {% if F.show_done %}checked{% endif %} /> Показывать завершённые проекты</label>
-      <label><input type="checkbox" name="show_cancel" value="1" {% if F.show_cancel %}checked{% endif %} /> Показывать отменённые</label>
-      <label><input type="checkbox" name="group" value="1" {% if F.group %}checked{% endif %} /> Группировать по руководителям</label>
-      {% if F.group %}
-      <span class="plan-checks__right">
-        <button type="button" class="button is-light is-small" id="plan-collapse-all">Свернуть всех (только нагрузка)</button>
-        <button type="button" class="button is-light is-small" id="plan-expand-all">Развернуть всех</button>
-      </span>
-      {% endif %}
+    <div class="rp-f">
+      <label class="rp-l" for="plan-weeks">Ширина периода</label>
+      <select id="plan-weeks" name="plan_weeks">
+        {% for w in F.allowed_weeks %}
+          <option value="{{ w }}" {% if F.weeks == w %}selected{% endif %}>{{ w }} {{ 'неделя' if w % 10 == 1 and w % 100 != 11 else ('недели' if w % 10 in [2, 3, 4] and w % 100 not in [12, 13, 14] else 'недель') }}</option>
+        {% endfor %}
+      </select>
     </div>
-
-    <div class="plan-tools">
-      <span class="plan-tools__title">Подобрать свободное окно:</span>
-      <span class="text-hint">длительностью от</span>
-      <input class="plan-num" type="number" name="fw_len" value="{{ F.fw_len }}" min="1" max="52" aria-label="Длительность окна, недель" />
-      <span class="text-hint">нед., при нагрузке не более</span>
-      <input class="plan-num" type="number" name="fw_lim" value="{{ F.fw_lim }}" min="0" max="12" aria-label="Допустимое число проектов одновременно" />
-      <span class="text-hint">проектов одновременно</span>
-      <button type="submit" name="find" value="1" class="button is-primary is-small">Найти</button>
-      {% if P.do_find %}<button type="submit" name="find" value="0" class="button is-light is-small">Сбросить</button>{% endif %}
-    </div>
-    {% if P.do_find %}
-    <div class="plan-chips" id="plan-find-results">
-      {% for r in P.find_results %}
-        <button type="button" class="plan-chip" data-chief="{{ r.chief }}" data-idx="{{ r.start_idx }}"><b>{{ r.chief }}</b> · {{ r.from }} – {{ r.to }} ({{ r.len }} {{ r.len_word }})</button>
-      {% else %}
-        <span class="text-hint">В выбранном периоде подходящих окон нет — уменьшите длительность или увеличьте допустимую нагрузку. Окна ищутся, начиная с текущей недели.</span>
-      {% endfor %}
+    {% if is_director %}
+    <div class="rp-f">
+      <label class="rp-l" for="plan-chief">Руководитель проекта</label>
+      <select id="plan-chief" name="project_chief">
+        <option value="" {% if not F.chief %}selected{% endif %}>(все)</option>
+        {% for ch in P.chiefs_all %}
+          <option value="{{ ch }}" {% if F.chief == ch %}selected{% endif %}>{{ ch }}</option>
+        {% endfor %}
+      </select>
     </div>
     {% endif %}
-
-    <div class="plan-tools">
-      <span class="plan-tools__title">Норма нагрузки:</span>
-      <span class="text-hint">до</span>
-      <input class="plan-num" type="number" name="norm" value="{{ F.norm }}" min="1" max="12" aria-label="Норма проектов одновременно" />
-      <span class="text-hint">проектов одновременно на одного руководителя (выше нормы цвет меняется на жёлтый и красный)</span>
+    <div class="rp-f">
+      <label class="rp-l" for="plan-kind">Вид договора</label>
+      <select id="plan-kind" name="contract_kind">
+        <option value="" {% if not F.kind %}selected{% endif %}>(все)</option>
+        {% for k in P.kinds %}
+          <option value="{{ k }}" {% if F.kind == k %}selected{% endif %}>{{ k }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="rp-f">
+      <label class="rp-l" for="plan-norm">Норма нагрузки</label>
+      <div class="rp-range"><input class="plan-num" id="plan-norm" type="number" name="norm" value="{{ F.norm }}" min="1" max="12" aria-label="Норма проектов одновременно" /><span class="muted small">проектов</span></div>
+    </div>
+    <div class="rp-f">
+      <span class="rp-l">Сдвиг периода</span>
+      <div class="rp-seg" role="group" aria-label="Сдвиг периода">
+        <button type="button" class="js-plan-shift" data-weeks="-4">◀ 4 нед.</button>
+        <button type="button" class="js-plan-shift" data-current="1">К текущей неделе</button>
+        <button type="button" class="js-plan-shift" data-weeks="4">4 нед. ▶</button>
+      </div>
     </div>
 
-    <div class="actions actions--mt-sm">
+    <span class="rp-spacer"></span>
+    <div class="rp-actions">
       <button type="submit" class="button is-primary">Применить</button>
+      <a class="button is-light" href="{{ url_for('reports', report_type='plan', reset=1) }}" title="Сбросить фильтры и забыть сохранённые">Сбросить</a>
+      <button type="submit" name="export" value="xlsx" class="button is-light" title="Выгрузить отчёт с текущими фильтрами в Excel">⬇ Excel</button>
     </div>
   </form>
+
+  <div class="plan-checks">
+    <label><input type="checkbox" form="plan-form" name="show_done" value="1" {% if F.show_done %}checked{% endif %} /> Показывать завершённые проекты</label>
+    <label><input type="checkbox" form="plan-form" name="show_cancel" value="1" {% if F.show_cancel %}checked{% endif %} /> Показывать отменённые</label>
+    <label><input type="checkbox" form="plan-form" name="group" value="1" {% if F.group %}checked{% endif %} /> Группировать по руководителям</label>
+    {% if F.group %}
+    <span class="plan-checks__right">
+      <button type="button" class="button is-light is-small" id="plan-collapse-all">Свернуть всех (только нагрузка)</button>
+      <button type="button" class="button is-light is-small" id="plan-expand-all">Развернуть всех</button>
+    </span>
+    {% endif %}
+  </div>
+  <p class="rp-note">Фильтры запоминаются для вашей учётной записи и применяются при следующем открытии отчёта.</p>
 </div>
 
-<div class="box">
-  <h3 class="section-title">Планирование проектов</h3>
+{% include "_reports_tiles.html" %}
+
+<div class="rp-card">
+  <div class="plan-finder">
+    <div class="plan-finder__box">
+      <h4>Подобрать свободное окно</h4>
+      <div class="plan-finder__row">От <input class="plan-num" type="number" form="plan-form" name="fw_len" value="{{ F.fw_len }}" min="1" max="52" aria-label="Длительность окна, недель" /> нед.</div>
+      <div class="plan-finder__row">Не более <input class="plan-num" type="number" form="plan-form" name="fw_lim" value="{{ F.fw_lim }}" min="0" max="12" aria-label="Допустимое число проектов одновременно" /> проектов одновременно</div>
+      <div class="plan-finder__btns">
+        <button type="submit" form="plan-form" name="find" value="1" class="button is-primary is-small">Найти</button>
+        {% if P.do_find %}<button type="submit" form="plan-form" name="find" value="0" class="button is-light is-small">Сбросить</button>{% endif %}
+      </div>
+      <p class="text-hint">Окна ищутся, начиная с текущей недели.</p>
+    </div>
+    <div>
+      <p class="text-hint">Найденные варианты — клик прокрутит таблицу к окну:</p>
+      <div class="plan-chips" id="plan-find-results">
+        {% if P.do_find %}
+          {% for r in P.find_results %}
+            <button type="button" class="plan-chip" data-chief="{{ r.chief }}" data-idx="{{ r.start_idx }}"><b>{{ r.chief }}</b><span>{{ r.from }} – {{ r.to }} · {{ r.len }} {{ r.len_word }}</span></button>
+          {% else %}
+            <span class="text-hint">В выбранном периоде подходящих окон нет — уменьшите длительность или увеличьте допустимую нагрузку.</span>
+          {% endfor %}
+        {% else %}
+          <span class="text-hint">Задайте условия и нажмите «Найти».</span>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="rp-card">
+  <h3 class="rp-h">Планирование проектов</h3>
 
   <div class="plan-legend">
     <span><i class="plan-sw plan-sw--plan"></i>Запланирован</span>

@@ -5,7 +5,7 @@ import logging
 import os
 from typing import Set, Tuple
 
-from flask import Flask, flash, redirect, render_template, request, session, url_for
+from flask import Flask, flash, jsonify, redirect, render_template, request, send_file, session, url_for
 from flask_session import Session
 
 from config import (
@@ -60,6 +60,11 @@ from db import (
     executor_has_overlapping_assignment,
     replace_project_tasks,
     update_project_fields,
+    update_task_status,
+    fetch_worker_canonical_map,
+    fetch_report_filters,
+    save_report_filters,
+    clear_report_filters,
     update_bonus_by_rid,
     update_voyage_by_rid,
     update_contracter_by_rid,
@@ -76,6 +81,7 @@ from reports_service import (
     PLAN_DEFAULT_NORM,
     PLAN_DEFAULT_WEEKS,
     TaskInterval,
+    assign_colours_to_contracts,
     build_execution_report,
     build_gantt_model,
     build_planning_report,
@@ -84,7 +90,33 @@ from reports_service import (
     daterange_inclusive,
     employee_project_workdays,
 )
-from workdays import calendar_for_period
+from reports_export import (
+    XLSX_MIME,
+    export_economy,
+    export_execution,
+    export_gantt,
+    export_planning,
+    export_utilisation,
+)
+from reports_ui import (
+    FILTER_KEYS,
+    PERIOD_PRESETS,
+    build_gantt_bars,
+    is_vacation,
+    month_spans,
+    econ_tiles,
+    exec_tiles,
+    gant_tiles,
+    has_filter_params,
+    initials,
+    name_hue,
+    pick_filters,
+    planning_tiles,
+    presets_for,
+    resolve_period,
+    util_tiles,
+)
+from workdays import calendar_for_period, ru_holidays_for_years
 
 logger = logging.getLogger("po_taskun")
 
@@ -165,6 +197,8 @@ def create_app() -> Flask:
         return "#ffffff" if contrast_white >= contrast_dark else dark
 
     app.jinja_env.filters["contrast_text"] = _contrast_text
+    app.jinja_env.filters["initials"] = initials
+    app.jinja_env.filters["name_hue"] = name_hue
 
     @app.context_processor
     def inject_globals():
@@ -597,6 +631,53 @@ def create_app() -> Flask:
         flash("Проект обновлен.", "success")
         return redirect(url_for("projects"))
 
+    def visible_project(role: str, short_name: str, contract_number: str, etap_number: str) -> Optional[Dict[str, Any]]:
+        """Строка проекта (договор + этап), если она видна текущему пользователю, иначе None."""
+        rows = fetch_projects(
+            role=role,
+            current_short_name=short_name,
+            contract_kinds=None,
+            executant_names=None,
+            statuses=None,
+            period_start=None,
+            period_end=None,
+        )
+        return next(
+            (
+                p
+                for p in rows
+                if p["contract_number"] == contract_number and str(p.get("etap_number") or "") == str(etap_number)
+            ),
+            None,
+        )
+
+    def task_to_client(t: Dict[str, Any], canon: Dict[str, str]) -> Dict[str, Any]:
+        """Задача в виде для скрипта доски/списка: даты в ISO, исполнитель в каноническом виде (short_name)."""
+
+        def iso(value: object) -> str:
+            try:
+                return parse_date_from_ddmmyyyy(format_date_ddmmyyyy(value)).isoformat()
+            except Exception:
+                return ""
+
+        def text(value: object) -> str:
+            # при импорте из Excel пустые ячейки иногда попадали в БД строкой "None"
+            s = str(value or "").strip()
+            return "" if s == "None" else s
+
+        worker = str(t.get("worker_name") or "").strip()
+        return {
+            "id": t.get("task_id"),
+            "name": text(t.get("task_name")),
+            "desc": text(t.get("task_adenda")),
+            "worker": canon.get(worker, worker),
+            "status": text(t.get("task_status")),
+            "start": iso(t.get("task_start_date")),
+            "end": iso(t.get("task_end_date")),
+            "comment": text(t.get("task_comment")),
+            "file": text(t.get("working_file")),
+        }
+
     @app.get("/project/<path:contract_number>/<etap_number>")
     def project_card(contract_number: str, etap_number: str):
         redir = require_login()
@@ -610,59 +691,126 @@ def create_app() -> Flask:
             flash("На этапе 1 для Администратора доступен только просмотр профиля.", "error")
             return redirect(url_for("profile"))
 
-        # Visibility check by contract + stage
-        projects_rows = fetch_projects(
-            role=role,
-            current_short_name=short_name,
-            contract_kinds=None,
-            executant_names=None,
-            statuses=None,
-            period_start=None,
-            period_end=None,
-        )
-        allowed = any(
-            p["contract_number"] == contract_number and str(p.get("etap_number") or "") == str(etap_number)
-            for p in projects_rows
-        )
-        if not allowed:
-            flash("Нет доступа к выбранному проекту.", "error")
-            return redirect(url_for("projects"))
-
-        # project info from exact contract + stage row
-        project_info = next(
-            (
-                p
-                for p in projects_rows
-                if p["contract_number"] == contract_number and str(p.get("etap_number") or "") == str(etap_number)
-            ),
-            None,
-        )
+        project_info = visible_project(role, short_name, contract_number, etap_number)
         if project_info is None:
-            flash("Карточка проекта не найдена в БД.", "error")
+            flash("Нет доступа к выбранному проекту.", "error")
             return redirect(url_for("projects"))
 
         tasks_db = fetch_project_tasks(contract_number, etap_number)
         draft_key = f"draft::{contract_number}::{etap_number}"
         tasks_draft = session.get(draft_key)
-        tasks = tasks_draft if tasks_draft is not None else tasks_db
+        has_draft = tasks_draft is not None
+        tasks = tasks_draft if has_draft else tasks_db
 
         mode = edit_mode(role)
+        task_statuses = fetch_task_statuses()
+        canon = fetch_worker_canonical_map()
+        task_payload = [task_to_client(t, canon) for t in tasks]
+
+        # Праздники нужны скрипту доски, чтобы светофор сроков считался так же, как в отчёте «Выполнение задач».
+        today = dt.date.today()
+        years = {today.year - 1, today.year, today.year + 1}
+        for t in task_payload:
+            for key in ("start", "end"):
+                if t[key]:
+                    years.add(int(t[key][:4]))
+
+        tasks_ctx = {
+            "tasks": task_payload,
+            "statuses": task_statuses,
+            "workers": fetch_worker_short_names(),
+            "me": canon.get(short_name, short_name),
+            "mode": mode,
+            "draft": has_draft,
+            "holidays": sorted(d.isoformat() for d in ru_holidays_for_years(years)),
+            "statusUrl": url_for("task_status", contract_number=contract_number, etap_number=etap_number),
+        }
 
         return render_template(
             "project_card.html",
             project=project_info,
             tasks=tasks,
+            tasks_ctx=tasks_ctx,
             contract_number=contract_number,
             etap_number=etap_number,
             workers=fetch_worker_short_names(),
-            task_statuses=fetch_task_statuses(),
+            task_statuses=task_statuses,
             arm=arm_for_role(role),
             edit_mode=mode,
         )
 
-    def render_planning_report(role: str, is_director: bool):
+    @app.post("/project/<path:contract_number>/<etap_number>/task_status")
+    def task_status(contract_number: str, etap_number: str):
+        """Перенос карточки на доске: меняет статус одной задачи без пересохранения всего этапа (JSON)."""
+        if "user" not in session:
+            return jsonify(ok=False, error="Требуется вход в систему."), 401
+        role = current_role()
+        if not can_save_tasks(role):
+            return jsonify(ok=False, error="Менять статус задач нельзя в вашей роли."), 403
+        if visible_project(role, current_short_name(), contract_number, etap_number) is None:
+            return jsonify(ok=False, error="Нет доступа к выбранному проекту."), 403
+
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict):
+            return jsonify(ok=False, error="Ожидается JSON."), 400
+        try:
+            task_id = int(data.get("task_id"))
+        except (TypeError, ValueError):
+            return jsonify(ok=False, error="Не указана задача."), 400
+        status = str(data.get("status") or "").strip()
+        if status not in set(fetch_task_statuses()):
+            return jsonify(ok=False, error="Некорректный статус задачи."), 400
+        expect = data.get("expect")
+        if not isinstance(expect, dict):
+            expect = {}
+
+        result = update_task_status(
+            contract_number=contract_number,
+            etap_number=etap_number,
+            task_id=task_id,
+            status=status,
+            expect={k: str(expect.get(k) or "") for k in ("name", "worker", "start", "end")},
+            only_worker=current_short_name() if role == "Консультант" else None,
+        )
+        if result == "ok":
+            return jsonify(ok=True, status=status)
+        messages = {
+            "not_found": ("Задача не найдена. Обновите страницу.", 404),
+            "conflict": ("Задача была изменена другим пользователем. Обновите страницу.", 409),
+            "forbidden": ("Консультант может менять статус только своих задач.", 403),
+        }
+        msg, code = messages.get(result, ("Не удалось изменить статус.", 500))
+        return jsonify(ok=False, error=msg), code
+
+    def xlsx_response(data: bytes, base_name: str):
+        from io import BytesIO
+
+        name = f"{base_name}_{dt.date.today().strftime('%Y-%m-%d')}.xlsx"
+        return send_file(BytesIO(data), mimetype=XLSX_MIME, as_attachment=True, download_name=name)
+
+    def resolve_report_args(report_type: str):
+        """
+        Откуда брать фильтры отчёта: из запроса («Применить» — заодно запоминаем их для пользователя),
+        из прямой ссылки с параметрами или из сохранённого состояния. Возвращает (args, redirect|None).
+        """
+        user_key = current_short_name()
+        if request.args.get("reset") == "1":
+            clear_report_filters(user_key, report_type)
+            return None, redirect(url_for("reports", report_type=report_type))
+        applied = request.args.get("apply") == "1" or request.args.get("plan_submit") == "1"
+        if applied:
+            if request.args.get("export") != "xlsx":
+                save_report_filters(user_key, report_type, pick_filters(report_type, request.args))
+            return request.args, None
+        if has_filter_params(report_type, request.args):
+            return request.args, None
+        saved = fetch_report_filters(user_key, report_type)
+        if saved and report_type == "plan":
+            saved["plan_submit"] = "1"  # в сохранённом состоянии неотмеченные галочки означают «выключено»
+        return saved, None
+
+    def render_planning_report(role: str, is_director: bool, args: Any):
         """Отчёт «Планирование проектов»: недели × проекты, нагрузка руководителей, поиск свободных окон."""
-        args = request.args
         today = dt.date.today()
         submitted = args.get("plan_submit") == "1"  # у неотмеченного чекбокса в GET нет значения
 
@@ -706,9 +854,12 @@ def create_app() -> Flask:
             contract_kind=contract_kind,
             show_done=show_done,
             show_cancel=show_cancel,
-            find_len=fw_len if do_find else None,
-            find_limit=fw_lim if do_find else None,
+            find_len=fw_len,
+            find_limit=fw_lim,
+            show_find=do_find,
         )
+        if request.args.get("export") == "xlsx":
+            return xlsx_response(export_planning(plan=plan), "planirovanie_proektov")
         plan_form = {
             "start": plan["start"].strftime("%d.%m.%Y"),
             "weeks": weeks,
@@ -729,6 +880,7 @@ def create_app() -> Flask:
             is_director=is_director,
             plan=plan,
             plan_form=plan_form,
+            tiles=planning_tiles(plan, fw_len, fw_lim),
             date_start="",
             date_end="",
             contract_kind=None,
@@ -754,10 +906,8 @@ def create_app() -> Flask:
         is_director = role == "Директор"
         if report_type == "gant" and role not in {"Директор", "Руководитель проекта"}:
             return redirect(url_for("reports", report_type="exec"))
-        if report_type == "plan":
-            if role not in {"Директор", "Руководитель проекта"}:
-                return redirect(url_for("reports", report_type="exec"))
-            return render_planning_report(role, is_director)
+        if report_type == "plan" and role not in {"Директор", "Руководитель проекта"}:
+            return redirect(url_for("reports", report_type="exec"))
         if report_type == "util" and not is_director:
             flash("Отчёт по утилизации не доступен.", "error")
             fallback = "gant" if role == "Руководитель проекта" else "exec"
@@ -767,20 +917,38 @@ def create_app() -> Flask:
             fallback = "gant" if role == "Руководитель проекта" else "exec"
             return redirect(url_for("reports", report_type=fallback))
 
-        contract_kind = request.args.get("contract_kind", "").strip() or None
-        project_chief = request.args.get("project_chief", "").strip() or None
-        contract_number = request.args.get("contract_number", "").strip() or None
+        args, args_redirect = resolve_report_args(report_type)
+        if args_redirect:
+            return args_redirect
+        if report_type == "plan":
+            return render_planning_report(role, is_director, args)
+
+        contract_kind = args.get("contract_kind", "").strip() or None
+        project_chief = args.get("project_chief", "").strip() or None
+        contract_number = args.get("contract_number", "").strip() or None
         if report_type not in {"gant", "exec"}:
             contract_number = None
         if report_type == "exec":
             contract_kind = None
-        sort_by = request.args.get("sort_by", "").strip().lower() or None
-        sort_dir = request.args.get("sort_dir", "desc").strip().lower()
+        sort_by = args.get("sort_by", "").strip().lower() or None
+        sort_dir = args.get("sort_dir", "desc").strip().lower()
         if sort_dir not in {"asc", "desc"}:
             sort_dir = "desc"
 
-        date_start_raw = request.args.get("date_start", "").strip()
-        date_end_raw = request.args.get("date_end", "").strip()
+        # Быстрый период («Месяц», «Квартал»…) пересчитывается от сегодняшнего дня, поэтому в сохранённых
+        # фильтрах не «протухает»; произвольные даты сохраняются как есть.
+        today = dt.date.today()
+        period = args.get("period", "").strip()
+        if not period and not args.get("date_start") and not args.get("date_end") and report_type == "gant":
+            period = "month"  # Гант ограничен 31 днём, поэтому по умолчанию — текущий месяц, а не начало данных в БД
+        preset_range = resolve_period(period, today) if period in PERIOD_PRESETS.get(report_type, ()) else None
+        if preset_range:
+            date_start_raw = preset_range[0].strftime("%d.%m.%Y")
+            date_end_raw = preset_range[1].strftime("%d.%m.%Y")
+        else:
+            period = "custom"
+            date_start_raw = args.get("date_start", "").strip()
+            date_end_raw = args.get("date_end", "").strip()
 
         # Defaults from DB (task date range in visible scope)
         default_min_iso, default_max_iso = fetch_tasks_date_bounds_for_reports(
@@ -805,7 +973,6 @@ def create_app() -> Flask:
             date_end_raw = iso_to_ddmmyyyy(default_max_iso) if default_max_iso else ""
 
         # If still empty, fallback to last 14..next 14 days
-        today = dt.date.today()
         if not date_start_raw:
             date_start_raw = (today - dt.timedelta(days=14)).strftime("%d.%m.%Y")
         if not date_end_raw:
@@ -901,14 +1068,22 @@ def create_app() -> Flask:
         util_total_by_employee: Dict[str, int] = {}
         util_period_workdays: int = 0
         util_rate_by_employee: Dict[str, float] = {}
+        util_colors: Dict[str, str] = {}
 
         economy_rows: List[Dict[str, Any]] = []
         done_status_name = fetch_done_task_status_name()
 
+        gant_bars: List[Dict[str, Any]] = []
+        gant_legend: List[Dict[str, str]] = []
         if report_type == "gant":
             gant_days = daterange_inclusive(date_start, date_end)
             if intervals:
                 gant_employees, gant_days, gant_cells, gant_colors = build_gantt_model(intervals, gant_days)
+                gant_bars, _bar_colours = build_gantt_bars(intervals, gant_days)
+                gant_legend = [
+                    {"contract": c, "color": col, "vacation": is_vacation(c)}
+                    for c, col in sorted(gant_colors.items())
+                ]
         elif report_type == "util":
             cal = calendar_for_period(date_start, date_end)
             util_period_workdays = len(cal.workdays_inclusive(date_start, date_end))
@@ -935,6 +1110,7 @@ def create_app() -> Flask:
                     util_rate_by_employee[w] = 100.0 * days_on_projects / util_period_workdays
                 else:
                     util_rate_by_employee[w] = 0.0
+            util_colors = assign_colours_to_contracts({c for per in util_by_employee.values() for c in per})
         elif report_type == "econ":
             cal = calendar_for_period(date_start, date_end)
 
@@ -1032,9 +1208,48 @@ def create_app() -> Flask:
 
                 economy_rows.sort(key=key_fn, reverse=reverse)
 
+        if report_type == "gant":
+            total_workers = len([w for w in fetch_workers(enabled_only=True) if w.get("short_name")])
+            tiles = gant_tiles(gant_bars, total_workers)
+        elif report_type == "util":
+            tiles = util_tiles(util_rate_by_employee)
+        elif report_type == "econ":
+            tiles = econ_tiles(economy_rows)
+        else:
+            tiles = exec_tiles(exec_workers)
+
+        if request.args.get("export") == "xlsx":
+            if report_type == "gant":
+                data = export_gantt(
+                    employees=gant_employees, days=gant_days, cells=gant_cells,
+                    date_start=date_start_raw, date_end=date_end_raw,
+                )
+                base = "diagramma_ganta"
+            elif report_type == "util":
+                data = export_utilisation(
+                    employees=util_employees, by_employee=util_by_employee, total_days=util_total_by_employee,
+                    period_workdays=util_period_workdays, rate=util_rate_by_employee,
+                    date_start=date_start_raw, date_end=date_end_raw,
+                )
+                base = "utilizaciya"
+            elif report_type == "econ":
+                data = export_economy(rows=economy_rows, date_start=date_start_raw, date_end=date_end_raw)
+                base = "ekonomika_proektov"
+            else:
+                data = export_execution(workers=exec_workers, date_start=date_start_raw, date_end=date_end_raw)
+                base = "vypolnenie_zadach"
+            return xlsx_response(data, base)
+
         return render_template(
             "reports.html",
             report_type=report_type,
+            period=period,
+            period_presets=presets_for(report_type),
+            tiles=tiles,
+            gant_bars=gant_bars,
+            gant_months=month_spans(gant_days) if report_type == "gant" else [],
+            today=today,
+            gant_legend=gant_legend,
             date_start=date_start_raw,
             date_end=date_end_raw,
             contract_kind=contract_kind,
@@ -1055,6 +1270,7 @@ def create_app() -> Flask:
             util_total_by_employee=util_total_by_employee,
             util_period_workdays=util_period_workdays,
             util_rate_by_employee=util_rate_by_employee,
+            util_colors=util_colors,
             # economy
             economy_rows=economy_rows,
             sort_by=sort_by or "",

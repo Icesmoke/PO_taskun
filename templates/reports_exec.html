@@ -1,0 +1,98 @@
+{# Выполнение задач: дерево сотрудник → проект → задача. Контекст: exec_workers. #}
+{% macro progress(pct) -%}
+  <div class="rp-meter rp-meter--sm"><div class="rp-bar"><i class="is-ok" style="width: {{ pct or 0 }}%;"></i></div><b>{% if pct is none %}—{% else %}{{ '%.0f'|format(pct) }}%{% endif %}</b></div>
+{%- endmacro %}
+{% set all_tasks = [] %}
+{% for w in exec_workers %}{% for p in w.projects %}{% for t in p.tasks %}{% if all_tasks.append(t) %}{% endif %}{% endfor %}{% endfor %}{% endfor %}
+{% macro count(light) -%}{{ all_tasks|selectattr('light', 'equalto', light)|list|length }}{%- endmacro %}
+
+<div class="rp-card">
+  <div class="rp-headrow">
+    <div>
+      <h3 class="rp-h">Выполнение задач</h3>
+      <p class="rp-sub">В отчёт попадают задачи, интервал которых пересекается с выбранным периодом.</p>
+    </div>
+    {% if exec_workers %}
+    <div class="rp-actions">
+      <button type="button" class="button is-light is-small" id="rp-collapse-all">Свернуть всех</button>
+      <button type="button" class="button is-light is-small" id="rp-expand-all">Развернуть всех</button>
+    </div>
+    {% endif %}
+  </div>
+
+  {% if exec_workers|length == 0 %}
+    <div class="muted">Нет данных для выбранного периода.</div>
+  {% else %}
+    <div class="rp-legend" id="rp-light-filter" role="group" aria-label="Фильтр по сроку">
+      <button type="button" class="rp-chip is-on" data-light="">Все <b>{{ all_tasks|length }}</b></button>
+      <button type="button" class="rp-chip" data-light="red"><i class="rp-sw" style="background: var(--rp-bad);"></i>Срок ≤ 1 дня <b>{{ count('red') }}</b></button>
+      <button type="button" class="rp-chip" data-light="yellow"><i class="rp-sw" style="background: var(--rp-warn);"></i>2–3 дня <b>{{ count('yellow') }}</b></button>
+      <button type="button" class="rp-chip" data-light="green"><i class="rp-sw" style="background: var(--rp-ok);"></i>Более 3 дней <b>{{ count('green') }}</b></button>
+      <button type="button" class="rp-chip" data-light="gray"><i class="rp-sw" style="background: var(--color-border);"></i>Выполнено / отмена <b>{{ count('gray') }}</b></button>
+    </div>
+
+    <div class="rp-tw">
+      <table class="rp-table rp-tree" id="exec-report-table">
+        <thead>
+          <tr>
+            <th class="rp-static">Пользователь / проект / задача</th>
+            <th class="rp-static">Статус</th>
+            <th class="rp-static">Начало</th>
+            <th class="rp-static">Окончание</th>
+            <th class="num rp-static">Дней</th>
+            <th class="num rp-static">Выполнено / всего</th>
+            <th class="rp-static">Выполнение</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for w in exec_workers %}
+            {% set wid = 'w' ~ loop.index %}
+            <tr class="rp-w" data-exec-id="{{ wid }}">
+              <td>
+                <div class="rp-who">
+                  <button type="button" class="exec-toggle" aria-expanded="true" aria-label="Свернуть или развернуть {{ w.worker_name }}">▼</button>
+                  <span class="rp-av" style="background: hsl({{ w.worker_name|name_hue }} 52% 42%);">{{ w.worker_name|initials }}</span>
+                  <span title="{{ w.full_name or w.worker_name }}">{{ w.worker_name }}</span>
+                  <span class="rp-tnote">{{ w.total }} {{ 'задача' if w.total % 10 == 1 and w.total % 100 != 11 else ('задачи' if w.total % 10 in [2, 3, 4] and w.total % 100 not in [12, 13, 14] else 'задач') }}</span>
+                </div>
+              </td>
+              <td></td><td></td><td></td>
+              <td class="num">{{ w.days }}</td>
+              <td class="num">{{ w.done }} / {{ w.total }}</td>
+              <td>{{ progress(w.pct) }}</td>
+            </tr>
+            {% for p in w.projects %}
+              {% set pid = wid ~ '-p' ~ loop.index %}
+              <tr class="rp-p" data-exec-id="{{ pid }}" data-exec-parent="{{ wid }}">
+                <td>
+                  <div class="rp-who">
+                    <button type="button" class="exec-toggle" aria-expanded="true" aria-label="Свернуть или развернуть проект {{ p.contract_number }}">▼</button>
+                    <b>{{ p.contract_number }}</b><span class="rp-tnote">{% if p.etap_number %}этап {{ p.etap_number }}{% endif %}</span>
+                  </div>
+                </td>
+                <td>{% if p.status %}<span class="rp-pill is-blue">{{ p.status }}</span>{% else %}—{% endif %}</td>
+                <td>{{ p.start or '—' }}</td>
+                <td>{{ p.end or '—' }}</td>
+                <td class="num">{{ p.days }}</td>
+                <td class="num">{{ p.done }} / {{ p.total }}</td>
+                <td>{{ progress(p.pct) }}</td>
+              </tr>
+              {% for t in p.tasks %}
+                {% set st = (t.status or '')|lower %}
+                <tr class="rp-k is-{{ t.light or 'none' }}" data-exec-parent="{{ pid }}" data-light="{{ t.light }}">
+                  <td>{{ t.task_name }}</td>
+                  <td><span class="rp-pill is-{{ 'ok' if st == 'выполнено' else ('blue' if st == 'в работе' else 'gray') }}">{{ t.status or '—' }}</span></td>
+                  <td>{{ t.start or '—' }}</td>
+                  <td>{{ t.end or '—' }}</td>
+                  <td class="num">{{ t.days }}</td>
+                  <td class="num">{% if t.light_text %}<span class="rp-pill is-{{ {'green': 'ok', 'yellow': 'warn', 'red': 'bad'}.get(t.light, 'gray') }}">{{ t.light_text }}</span>{% endif %}</td>
+                  <td>{% if t.pct is none %}—{% else %}{{ '%.0f'|format(t.pct) }}%{% endif %}</td>
+                </tr>
+              {% endfor %}
+            {% endfor %}
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endif %}
+</div>

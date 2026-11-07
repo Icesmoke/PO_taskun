@@ -1,0 +1,88 @@
+{# Экономика проектов. Контекст: economy_rows (project_revenue, cost_revenue, bonus_cost, voyages_cost, contracters_cost, total_costs, project_income, margin_rate). #}
+{% set parts = [
+  ('cost_revenue', 'Трудозатраты', 'hsl(212 58% 52%)'),
+  ('bonus_cost', 'Премии', 'hsl(152 50% 42%)'),
+  ('voyages_cost', 'Командировки', 'hsl(35 85% 50%)'),
+  ('contracters_cost', 'Подрядчики', 'hsl(280 50% 52%)'),
+] %}
+{% set tot_rev = economy_rows|sum(attribute='project_revenue') %}
+{% set tot_cost = economy_rows|sum(attribute='total_costs') %}
+{% set tot_inc = economy_rows|sum(attribute='project_income') %}
+{% set tot_margin = (tot_inc / tot_rev) if tot_rev else none %}
+
+<div class="rp-card">
+  <div class="rp-headrow">
+    <div>
+      <h3 class="rp-h">Экономика проектов</h3>
+      <p class="rp-sub">Клик по строке — расшифровка затрат, клик по заголовку — сортировка.</p>
+    </div>
+    <label class="rp-chk"><input type="checkbox" id="rp-econ-cols" /> Столбцы затрат</label>
+  </div>
+
+  {% if economy_rows|length == 0 %}
+    <div class="muted">Нет данных для выбранного периода.</div>
+  {% else %}
+    <div class="rp-legend">
+      {% for key, label, color in parts %}<span><i class="rp-sw" style="background: {{ color }};"></i>{{ label }}</span>{% endfor %}
+    </div>
+    <div class="rp-tw">
+      <table class="rp-table" data-sortable data-default-sort="margin:desc" id="rp-econ">
+        <thead>
+          <tr>
+            <th data-sort="name" data-type="text">Проект · заказчик</th>
+            <th class="num" data-sort="rev" data-type="num">Доход</th>
+            {% for key, label, color in parts %}<th class="num rp-static rp-c-extra">{{ label }}</th>{% endfor %}
+            <th class="num" data-sort="cost" data-type="num">Затраты</th>
+            <th class="rp-static rp-c-struct">Структура затрат</th>
+            <th class="num" data-sort="profit" data-type="num">Прибыль</th>
+            <th data-sort="margin" data-type="num">Маржа</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in economy_rows %}
+            {% set m = r.margin_rate %}
+            {% set tone = 'gray' if m is none else ('bad' if m < 0 else ('warn' if m < 0.15 else 'ok')) %}
+            <tr class="rp-main" data-sort-name="{{ (r.contract_number ~ ' ' ~ (r.client_name or ''))|lower }}" data-sort-rev="{{ r.project_revenue or 0 }}"
+                data-sort-cost="{{ r.total_costs or 0 }}" data-sort-profit="{{ r.project_income or 0 }}" data-sort-margin="{{ m if m is not none else -999 }}" data-key="e{{ loop.index }}" tabindex="0" aria-expanded="false">
+              <td>
+                <div class="rp-who"><span class="rp-chev">▶</span>
+                  <div><div>{{ r.contract_number }} <span class="muted small rp-light">этап {{ r.etap_number }}</span></div><div class="muted small rp-light">{{ r.client_name }}</div></div>
+                </div>
+              </td>
+              <td class="num">{{ (r.project_revenue or 0)|format_int_grouped }}</td>
+              {% for key, label, color in parts %}<td class="num muted rp-c-extra">{{ (r[key] or 0)|format_int_grouped }}</td>{% endfor %}
+              <td class="num">{{ (r.total_costs or 0)|format_int_grouped }}</td>
+              <td class="rp-c-struct">
+                <div class="rp-stack">
+                  {% for key, label, color in parts %}{% if r.total_costs %}<i title="{{ label }}: {{ (r[key] or 0)|format_int_grouped }}" style="width: {{ (r[key] or 0) / r.total_costs * 100 }}%; background: {{ color }};"></i>{% endif %}{% endfor %}
+                </div>
+              </td>
+              <td class="num rp-profit{% if (r.project_income or 0) < 0 %} is-neg{% endif %}">{{ (r.project_income or 0)|format_int_grouped }}</td>
+              <td><span class="rp-pill is-{{ tone }}">{% if m is none %}—{% else %}{{ '%.1f'|format(m * 100) }}%{% endif %}</span></td>
+            </tr>
+            <tr class="rp-detail" data-detail-for="e{{ loop.index }}" hidden>
+              <td colspan="9">
+                <div class="rp-dgrid">
+                  {% for key, label, color in parts %}
+                    <div class="rp-dr"><i class="rp-sw" style="background: {{ color }};"></i><span class="rp-dn">{{ label }}</span><b>{{ (r[key] or 0)|format_int_grouped }} ₽</b><span class="muted small">{% if r.total_costs %}{{ '%.0f'|format((r[key] or 0) / r.total_costs * 100) }}%{% else %}—{% endif %}</span></div>
+                  {% endfor %}
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+        <tfoot>
+          <tr>
+            <td>Итого</td>
+            <td class="num">{{ tot_rev|format_int_grouped }}</td>
+            {% for key, label, color in parts %}<td class="num rp-c-extra">{{ (economy_rows|sum(attribute=key))|format_int_grouped }}</td>{% endfor %}
+            <td class="num">{{ tot_cost|format_int_grouped }}</td>
+            <td class="rp-c-struct"></td>
+            <td class="num">{{ tot_inc|format_int_grouped }}</td>
+            <td>{% if tot_margin is not none %}<span class="rp-pill is-{{ 'bad' if tot_margin < 0 else ('warn' if tot_margin < 0.15 else 'ok') }}">{{ '%.1f'|format(tot_margin * 100) }}%</span>{% else %}—{% endif %}</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  {% endif %}
+</div>
