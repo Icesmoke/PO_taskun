@@ -1,6 +1,7 @@
 from typing import Any, Dict, List, Optional
 
 import datetime as dt
+import json
 import logging
 import os
 from typing import Set, Tuple
@@ -71,6 +72,7 @@ from db import (
 )
 from excel_parser import parse_tasks_from_xlsx
 from utils import (
+    format_contract_kind,
     format_date_ddmmyyyy,
     normalize_sqlite_timestamp_date,
     parse_date_from_ddmmyyyy,
@@ -329,6 +331,47 @@ def create_app() -> Flask:
             arm=arm_for_role(current_role()),
         )
 
+    PROJECTS_FILTER_KEY = "projects"
+    PROJECT_OPEN_STATUSES = ["В работе", "Запланирован"]
+
+    def project_to_client(p: Dict[str, Any], *, show_contract_sum: bool) -> Dict[str, Any]:
+        """Строка проекта для страницы: даты в ISO, вид договора без «.0», сумма договора — только директору."""
+
+        def iso(value: object) -> str:
+            try:
+                return parse_date_from_ddmmyyyy(format_date_ddmmyyyy(value)).isoformat()
+            except Exception:
+                return ""
+
+        def num(value: object) -> Optional[float]:
+            try:
+                return None if value is None or str(value).strip() == "" else float(value)
+            except (TypeError, ValueError):
+                return None
+
+        contract = str(p.get("contract_number") or "").strip()
+        etap = str(p.get("etap_number") if p.get("etap_number") is not None else "").strip()
+        return {
+            "contract": contract,
+            "etap": etap,
+            "url": url_for("project_card", contract_number=contract, etap_number=etap),
+            "kind": format_contract_kind(p.get("contract_kind")),
+            "client": str(p.get("client_name") or "").strip(),
+            "exec": str(p.get("executant_name") or "").strip(),
+            "chief": str(p.get("project_chief") or "").strip(),
+            "status": str(p.get("project_status") or "").strip(),
+            "ps": iso(p.get("plan_start_date")),
+            "pe": iso(p.get("plan_end_date")),
+            "cs": iso(p.get("contract_start_date")),
+            "ce": iso(p.get("contract_end_date")),
+            "act": iso(p.get("act_date")),
+            "period": str(p.get("period") or "").strip(),
+            "esum": num(p.get("etap_sum")),
+            "csum": num(p.get("contr_sum")) if show_contract_sum else None,
+            "tasks": int(p.get("task_total") or 0),
+            "done": int(p.get("task_done") or 0),
+        }
+
     @app.get("/projects")
     def projects():
         redir = require_login()
@@ -341,140 +384,89 @@ def create_app() -> Flask:
         if is_admin(role):
             return redirect(url_for("rights_user_panel"))
 
-        # Filters
-        contract_kinds = request.args.getlist("contract_kind") or None
-        executant_names = request.args.getlist("executant_name") or None
-        project_chiefs = request.args.getlist("project_chief") or None
-        statuses = request.args.getlist("project_status") or None
-        period_start = request.args.get("period_start") or None
-        period_end = request.args.get("period_end") or None
+        director = is_director(role)
+        rows = fetch_projects(role=role, current_short_name=short_name)
 
-        # Basic validation: dd.mm.YYYY if provided.
-        if period_start:
-            try:
-                parse_date_from_ddmmyyyy(period_start)
-            except Exception:
-                flash("Неверный формат периода начала (ожидается dd.mm.YYYY).", "error")
-                period_start = None
-        if period_end:
-            try:
-                parse_date_from_ddmmyyyy(period_end)
-            except Exception:
-                flash("Неверный формат периода окончания (ожидается dd.mm.YYYY).", "error")
-                period_end = None
+        # В таблице одна строка на «договор + этап» (в БД встречаются полные дубли).
+        seen: Set[Tuple[str, str]] = set()
+        client_rows: List[Dict[str, Any]] = []
+        for p in rows:
+            item = project_to_client(p, show_contract_sum=director)
+            key = (item["contract"], item["etap"])
+            if key in seen:
+                continue
+            seen.add(key)
+            client_rows.append(item)
 
-        sort_by = (request.args.get("sort_by") or "").strip() or None
-        allowed_sort = {
-            "contract_number",
-            "project_chief",
-            "client_name",
-            "executant_name",
-            "plan_start_date",
-            "plan_end_date",
-            "project_status",
+        status_catalog = fetch_project_status_catalog()
+        extra_statuses = sorted({r["status"] for r in client_rows if r["status"] and r["status"] not in status_catalog})
+        saved_raw = fetch_report_filters(short_name, PROJECTS_FILTER_KEY).get("state", "")
+        try:
+            saved_state = json.loads(saved_raw) if saved_raw else None
+        except ValueError:
+            saved_state = None
+
+        projects_ctx = {
+            "rows": client_rows,
+            "role": "director" if director else ("chief" if role == "Руководитель проекта" else "consultant"),
+            "canEdit": director,
+            "showChief": role in {"Директор", "Руководитель проекта"},
+            "statuses": status_catalog + extra_statuses,
+            "catalog": status_catalog,
+            "openStatuses": PROJECT_OPEN_STATUSES,
+            "saved": saved_state,
+            "filtersUrl": url_for("projects_filters"),
+            "createUrl": url_for("create_project_post"),
+            "updateUrl": url_for("update_project"),
+            "chiefs": sorted({r["chief"] for r in client_rows if r["chief"]}) if director else [],
+            "suggest": {
+                "chief": sorted({r["chief"] for r in client_rows if r["chief"]}),
+                "kind": sorted({r["kind"] for r in client_rows if r["kind"]}, key=lambda s: (len(s), s)),
+                "client": sorted({r["client"] for r in client_rows if r["client"]}),
+                "exec": sorted({r["exec"] for r in client_rows if r["exec"]}),
+            },
         }
-        if sort_by not in allowed_sort:
-            sort_by = None
-        if sort_by is None:
-            sort_by = "plan_end_date"
-            default_sort_dir = "desc"
-        else:
-            default_sort_dir = "asc"
-        sort_dir = (request.args.get("sort_dir") or default_sort_dir).strip().lower()
-        if sort_dir not in {"asc", "desc"}:
-            sort_dir = default_sort_dir
-
-        # Options for filters — from role-visible projects without UI filters.
-        visible_for_filters = fetch_projects(role=role, current_short_name=short_name)
-        all_kinds = sorted(
-            {str(p["contract_kind"]) for p in visible_for_filters if p["contract_kind"] is not None}
-        )
-        all_executants = sorted(
-            {p["executant_name"] for p in visible_for_filters if p["executant_name"] is not None}
-        )
-        all_project_chiefs = fetch_report_project_chiefs(role, short_name) if is_director(role) else []
-        all_statuses = fetch_project_statuses()
-        status_catalog = fetch_project_status_catalog() if is_director(role) else []
-
-        projects_rows = fetch_projects(
-            role=role,
-            current_short_name=short_name,
-            contract_kinds=contract_kinds,
-            executant_names=executant_names,
-            project_chiefs=project_chiefs,
-            statuses=statuses,
-            period_start=period_start,
-            period_end=period_end,
-            sort_by=sort_by,
-            sort_dir=sort_dir,
-        )
-
-        def _projects_query_url(params: Dict[str, List[str]]) -> str:
-            from urllib.parse import urlencode
-
-            pairs: List[Tuple[str, str]] = []
-            for key, values in params.items():
-                for value in values:
-                    if value is not None and str(value) != "":
-                        pairs.append((key, str(value)))
-            query = urlencode(pairs)
-            return url_for("projects") + ("?" + query if query else "")
-
-        def projects_sort_url(column: str) -> str:
-            params = request.args.to_dict(flat=False)
-            next_dir = "desc" if sort_by == column and sort_dir == "asc" else "asc"
-            params["sort_by"] = [column]
-            params["sort_dir"] = [next_dir]
-            return _projects_query_url(params)
-
-        def projects_filter_without(key: str, value: Optional[str] = None) -> str:
-            params = request.args.to_dict(flat=False)
-            if value is None:
-                params.pop(key, None)
-            else:
-                params[key] = [v for v in params.get(key, []) if str(v) != str(value)]
-                if not params[key]:
-                    params.pop(key, None)
-            return _projects_query_url(params)
-
-        def projects_clear_period() -> str:
-            params = request.args.to_dict(flat=False)
-            params.pop("period_start", None)
-            params.pop("period_end", None)
-            return _projects_query_url(params)
-
-        filters_active = bool(
-            (contract_kinds or [])
-            or (executant_names or [])
-            or (project_chiefs or [])
-            or (statuses or [])
-            or period_start
-            or period_end
-        )
-
         return render_template(
             "projects.html",
             role=role,
             arm=arm_for_role(role),
-            projects=projects_rows,
-            all_kinds=all_kinds,
-            all_executants=all_executants,
-            all_project_chiefs=all_project_chiefs,
-            all_statuses=all_statuses,
+            projects_ctx=projects_ctx,
             status_catalog=status_catalog,
-            contract_kinds=contract_kinds or [],
-            executant_names=executant_names or [],
-            project_chiefs=project_chiefs or [],
-            statuses=statuses or [],
-            period_start=period_start or "",
-            period_end=period_end or "",
-            sort_by=sort_by or "",
-            sort_dir=sort_dir,
-            projects_sort_url=projects_sort_url,
-            projects_filter_without=projects_filter_without,
-            projects_clear_period=projects_clear_period,
-            filters_active=filters_active,
         )
+
+    @app.post("/projects/filters")
+    def projects_filters():
+        """Запоминает настройки панели проектов для текущего пользователя (JSON от projects.js)."""
+        if "user" not in session:
+            return jsonify(ok=False, error="Требуется вход в систему."), 401
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict):
+            return jsonify(ok=False, error="Ожидается JSON."), 400
+
+        def str_list(value: Any) -> List[str]:
+            return [str(v)[:200] for v in value][:100] if isinstance(value, list) else []
+
+        sort = data.get("sort") if isinstance(data.get("sort"), dict) else {}
+        state = {
+            "status": str(data.get("status") or "")[:100],
+            "flag": data.get("flag") if data.get("flag") in {"soon", "late"} else "",
+            "act": data.get("act") if data.get("act") in {"actual", "30", "90", "all"} else "actual",
+            "sf": str(data.get("sf") or "")[:10],
+            "st": str(data.get("st") or "")[:10],
+            "ef": str(data.get("ef") or "")[:10],
+            "et": str(data.get("et") or "")[:10],
+            "kinds": str_list(data.get("kinds")),
+            "execs": str_list(data.get("execs")),
+            "chiefs": str_list(data.get("chiefs")),
+            "group": data.get("group") if data.get("group") in {"none", "status", "chief", "client"} else "none",
+            "size": data.get("size") if data.get("size") in {25, 50, 100} else 25,
+            "sort": {
+                "col": sort.get("col") if sort.get("col") in {"id", "client", "chief", "end", "status", "tasks"} else "end",
+                "asc": bool(sort.get("asc")),
+            },
+        }
+        save_report_filters(current_short_name(), PROJECTS_FILTER_KEY, {"state": json.dumps(state, ensure_ascii=False)})
+        return jsonify(ok=True)
 
     @app.post("/projects/create")
     def create_project_post():
@@ -511,6 +503,10 @@ def create_app() -> Flask:
             except Exception:
                 raise ValueError("Неверный формат даты (ожидается dd.mm.YYYY).")
             return normalize_sqlite_timestamp_date(s)
+
+        if project_stage_exists(contract_number, etap_number):
+            flash(f"Этап {etap_number} договора {contract_number} уже существует.", "error")
+            return redirect(url_for("projects"))
 
         try:
             project_status = empty_to_none(request.form.get("project_status"))

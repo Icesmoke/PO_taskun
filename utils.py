@@ -96,3 +96,14 @@ def verify_worker_password(stored: Optional[object], provided: Optional[str]) ->
             return False
     return hmac.compare_digest(s, p)
 
+
+
+def format_contract_kind(value: object) -> str:
+    """Вид договора хранится числом (413.0): показываем «413», нечисловые значения — как есть."""
+    if value is None or str(value).strip() == "":
+        return ""
+    try:
+        f = float(value)
+        return str(int(f)) if f == int(f) else str(f)
+    except (TypeError, ValueError):
+        return str(value).strip()
