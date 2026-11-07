@@ -1,0 +1,65 @@
+{# Диаграмма Ганта: сплошные полосы договоров. Контекст: gant_bars, gant_days, gant_months, gant_legend, today. #}
+{% set N = gant_days|length %}
+{% set W = 56 if N <= 14 else 34 %}
+{% set wd = ['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс'] %}
+<div class="rp-card">
+  <h3 class="rp-h">Диаграмма Ганта</h3>
+  <p class="rp-sub">Колонка «Сотрудник» и шапка с датами закреплены. Наведите на полосу — подсветятся все полосы этого договора, клик по договору в легенде закрепляет подсветку.</p>
+
+  {% if not gant_bars %}
+    <div class="muted">Нет данных для выбранного периода.</div>
+  {% else %}
+    <div class="rp-legend">
+      {% for l in gant_legend %}
+        <button type="button" class="rp-chip" data-pin="{{ l.contract }}">
+          <i class="rp-sw{% if l.vacation %} is-vac{% endif %}" {% if not l.vacation %}style="background: {{ l.color }};"{% endif %}></i>{{ l.contract }}
+        </button>
+      {% endfor %}
+    </div>
+
+    <div class="rp-gx" id="rp-gx">
+      <div class="rp-gin" id="rp-gin" style="--W: {{ W }}px; --N: {{ N }}; --L: 230px;">
+        <div class="rp-ghd">
+          <div class="rp-grow">
+            <div class="rp-glc rp-glc--head">Сотрудник</div>
+            <div class="rp-grc rp-gcells">
+              {% for m in gant_months %}<div class="rp-gm" style="width: calc(var(--W) * {{ m.span }});">{{ m.label }}</div>{% endfor %}
+            </div>
+          </div>
+          <div class="rp-grow">
+            <div class="rp-glc rp-glc--head"></div>
+            <div class="rp-grc rp-gcells">
+              {% for d in gant_days %}
+                <div class="rp-gd{% if d.weekday() >= 5 %} is-we{% endif %}{% if d == today %} is-today{% endif %}"><b>{{ d.day }}</b>{{ wd[d.weekday()] }}</div>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+
+        {% for e in gant_bars %}
+          <div class="rp-grow rp-grow--emp" data-name="{{ e.name|lower }}">
+            <div class="rp-glc">
+              <span class="rp-av" style="background: hsl({{ e.name|name_hue }} 52% 42%);">{{ e.name|initials }}</span>
+              <div>
+                <div class="rp-gname" title="{{ e.name }}">{{ e.name }}</div>
+                {% if e.dbl %}<div class="rp-dbl" title="В один день две и более задач">⚠ двойная занятость</div>{% endif %}
+              </div>
+            </div>
+            <div class="rp-grc rp-ggrid" style="height: {{ e.lanes * 26 + 10 }}px;">
+              {% for d in gant_days %}{% if d.weekday() >= 5 %}<div class="rp-wk" style="left: calc(var(--W) * {{ loop.index0 }}); width: var(--W);"></div>{% endif %}{% endfor %}
+              {% for b in e.bars %}
+                <div class="rp-gbar{% if b.vacation %} is-vac{% endif %}" data-c="{{ b.contract }}"
+                     style="top: {{ 5 + b.lane * 26 }}px; left: calc(var(--W) * {{ b.left }} + 1px); width: calc(var(--W) * {{ b.width }} - 2px);{% if not b.vacation %} background: {{ b.color }}; color: {{ b.color|contrast_text }};{% endif %}"
+                     title="{{ b.label }}&#10;{{ b.dates }}">{{ b.label }}{% if b.show_dates %} · {{ b.short_dates }}{% endif %}</div>
+              {% endfor %}
+            </div>
+          </div>
+        {% endfor %}
+
+        {% if gant_days and gant_days[0] <= today <= gant_days[-1] %}
+          <div class="rp-gtoday" style="left: calc(var(--L) + var(--W) * {{ (today - gant_days[0]).days }} + var(--W) / 2);"></div>
+        {% endif %}
+      </div>
+    </div>
+  {% endif %}
+</div>

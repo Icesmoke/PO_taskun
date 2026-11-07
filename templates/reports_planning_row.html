@@ -1,0 +1,13 @@
+{# Строка проекта отчёта «Планирование проектов». Контекст: b (полоса), gi (номер группы), show_chief. #}
+<div class="plan-row plan-row--prj"{% if gi %} data-parent="{{ gi }}"{% endif %}>
+  <div class="plan-lc">
+    <div class="plan-p1"><b>{{ b.contract }}</b><span class="plan-etap">этап {{ b.etap or '—' }}</span></div>
+    <div class="plan-p2" title="{{ b.client }}">{{ b.client }}</div>
+    {% if show_chief %}<div class="plan-p3">{{ b.chief }}</div>{% endif %}
+  </div>
+  <div class="plan-rc plan-grid">
+    <div class="plan-bar plan-bar--{{ b.cls }}{% if b.clip_l %} is-clip-l{% endif %}{% if b.clip_r %} is-clip-r{% endif %}"
+         style="left: calc(var(--plan-wk) * {{ b.left }}); width: calc(var(--plan-wk) * {{ b.width }});"
+         title="{{ b.title }}">{% if b.clip_l %}◀ {% endif %}{{ b.label }}{% if b.clip_r %} ▶{% endif %}</div>
+  </div>
+</div>

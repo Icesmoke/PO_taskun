@@ -527,11 +527,76 @@ def create_project(project: Dict[str, Any]) -> None:
 def fetch_project_tasks(contract_number: str, etap_number: str) -> List[Dict[str, Any]]:
     with get_connection() as con:
         rows = con.execute(
-            "SELECT contract_number, etap_number, task_name, task_adenda, worker_name, task_start_date, task_end_date, task_comment, working_file, task_status "
+            "SELECT rowid AS task_id, contract_number, etap_number, task_name, task_adenda, worker_name, task_start_date, task_end_date, task_comment, working_file, task_status "
             "FROM tasks WHERE contract_number = ? AND etap_number = ? ORDER BY task_name",
             (contract_number, etap_number),
         ).fetchall()
         return [dict(r) for r in rows]
+
+
+def fetch_worker_canonical_map() -> Dict[str, str]:
+    """short_name / full_name -> short_name (так исполнитель может быть записан в tasks.worker_name)."""
+    with get_connection() as con:
+        return _worker_canonical_map(con)
+
+
+def update_task_status(
+    *,
+    contract_number: str,
+    etap_number: str,
+    task_id: int,
+    status: str,
+    expect: Dict[str, str],
+    only_worker: Optional[str] = None,
+) -> str:
+    """
+    Меняет только статус одной задачи (перенос карточки на доске).
+
+    У tasks нет собственного id, поэтому задача определяется по rowid; чтобы не изменить чужую строку,
+    если этап пересохранили в другой вкладке, сверяются название, исполнитель и даты из момента загрузки страницы.
+    only_worker — для Консультанта: допускается только своя задача.
+    Возвращает "ok", "not_found", "conflict" или "forbidden".
+    """
+    con = get_connection()
+    try:
+        con.execute("BEGIN IMMEDIATE")
+        row = con.execute(
+            """
+            SELECT TRIM(COALESCE(task_name, '')) AS task_name,
+                   TRIM(COALESCE(worker_name, '')) AS worker_name,
+                   COALESCE(date(task_start_date), '') AS start_d,
+                   COALESCE(date(task_end_date), '') AS end_d
+            FROM tasks
+            WHERE rowid = ? AND contract_number = ? AND etap_number = ?
+            """,
+            (task_id, contract_number, etap_number),
+        ).fetchone()
+        if row is None:
+            con.rollback()
+            return "not_found"
+        mapping = _worker_canonical_map(con)
+        if only_worker is not None and _canonical_worker(mapping, row["worker_name"]) != _canonical_worker(
+            mapping, only_worker
+        ):
+            con.rollback()
+            return "forbidden"
+        if (
+            row["task_name"] != str(expect.get("name") or "").strip()
+            or _canonical_worker(mapping, row["worker_name"])
+            != _canonical_worker(mapping, str(expect.get("worker") or ""))
+            or row["start_d"] != str(expect.get("start") or "")
+            or row["end_d"] != str(expect.get("end") or "")
+        ):
+            con.rollback()
+            return "conflict"
+        con.execute("UPDATE tasks SET task_status = ? WHERE rowid = ?", (status, task_id))
+        con.commit()
+        return "ok"
+    except Exception:
+        con.rollback()
+        raise
+    finally:
+        con.close()
 
 
 def update_project_fields(
@@ -883,6 +948,44 @@ def fetch_report_project_chiefs(worker_role: str, current_short_name: str) -> Li
             "SELECT DISTINCT project_chief FROM projects WHERE project_chief IS NOT NULL ORDER BY project_chief"
         ).fetchall()
         return [r[0] for r in rows]
+
+
+def fetch_planning_projects(*, worker_role: str, current_short_name: str) -> List[Dict[str, Any]]:
+    """
+    Проекты для отчёта «Планирование проектов» (таблица projects, плановые сроки).
+
+    Директор видит все проекты, Руководитель проекта — только те, где он указан в project_chief.
+    Строки без плановых дат пропускаются. Даты возвращаются в ISO (YYYY-MM-DD).
+    """
+    where = [
+        "plan_start_date IS NOT NULL",
+        "plan_end_date IS NOT NULL",
+        "date(plan_start_date) IS NOT NULL",
+        "date(plan_end_date) IS NOT NULL",
+    ]
+    params: List[Any] = []
+    if worker_role == CHIEF_ROLE:
+        where.append("TRIM(project_chief) = TRIM(?)")
+        params.append(current_short_name)
+    with get_connection() as con:
+        rows = con.execute(
+            f"""
+            SELECT
+                contract_number,
+                etap_number,
+                contract_kind,
+                client_name,
+                project_chief,
+                project_status,
+                date(plan_start_date) AS plan_start,
+                date(plan_end_date) AS plan_end
+            FROM projects
+            WHERE {" AND ".join(where)}
+            ORDER BY date(plan_start_date), contract_number, etap_number
+            """,
+            params,
+        ).fetchall()
+        return [dict(r) for r in rows]
 
 
 def _execution_role_filters(
@@ -1392,3 +1495,64 @@ def fetch_economy_addon_sums_by_stage(
 
     return bonus_map, voyage_map, contracter_map
 
+
+
+# ---------------------------------------------------------------------------
+# Сохранённые фильтры отчётов (по пользователю и виду отчёта)
+# ---------------------------------------------------------------------------
+
+_REPORT_FILTERS_DDL = """
+CREATE TABLE IF NOT EXISTS report_filters (
+    worker_short_name TEXT NOT NULL,
+    report_type TEXT NOT NULL,
+    filters_json TEXT NOT NULL,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (worker_short_name, report_type)
+)
+"""
+
+
+def fetch_report_filters(worker_short_name: str, report_type: str) -> Dict[str, str]:
+    """Сохранённые фильтры отчёта пользователя (пустой словарь, если ничего не сохранено)."""
+    import json
+
+    with get_connection() as con:
+        con.execute(_REPORT_FILTERS_DDL)
+        row = con.execute(
+            "SELECT filters_json FROM report_filters WHERE worker_short_name = ? AND report_type = ?",
+            (worker_short_name, report_type),
+        ).fetchone()
+    if not row:
+        return {}
+    try:
+        data = json.loads(row[0])
+    except (TypeError, ValueError):
+        return {}
+    return {str(k): str(v) for k, v in data.items()} if isinstance(data, dict) else {}
+
+
+def save_report_filters(worker_short_name: str, report_type: str, filters: Dict[str, str]) -> None:
+    import json
+
+    with get_connection() as con:
+        con.execute(_REPORT_FILTERS_DDL)
+        con.execute(
+            """
+            INSERT INTO report_filters (worker_short_name, report_type, filters_json, updated_at)
+            VALUES (?, ?, ?, datetime('now'))
+            ON CONFLICT(worker_short_name, report_type)
+            DO UPDATE SET filters_json = excluded.filters_json, updated_at = excluded.updated_at
+            """,
+            (worker_short_name, report_type, json.dumps(filters, ensure_ascii=False)),
+        )
+        con.commit()
+
+
+def clear_report_filters(worker_short_name: str, report_type: str) -> None:
+    with get_connection() as con:
+        con.execute(_REPORT_FILTERS_DDL)
+        con.execute(
+            "DELETE FROM report_filters WHERE worker_short_name = ? AND report_type = ?",
+            (worker_short_name, report_type),
+        )
+        con.commit()

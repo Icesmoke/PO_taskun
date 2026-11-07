@@ -1,506 +1,98 @@
 {% extends "base.html" %}
 
-{% macro status_class(status) -%}
-{%- set s = (status or '')|lower -%}
-{%- if 'выполн' in s or 'закрыт' in s or 'готов' in s -%}task-status--done
-{%- elif 'работ' in s or 'процесс' in s or 'исполн' in s -%}task-status--progress
-{%- endif -%}
-{%- endmacro %}
-
-{% macro period_label(start, end) -%}
-{%- set a = start|format_date -%}
-{%- set b = end|format_date -%}
-{%- if a and b -%}{{ a }} — {{ b }}
-{%- elif a -%}с {{ a }}
-{%- elif b -%}до {{ b }}
-{%- else -%}даты не заданы
-{%- endif -%}
-{%- endmacro %}
-
 {% block content %}
   <div class="project-card-layout">
-    <div class="box">
-      <h2 class="page-title">Информация о проекте</h2>
-
-      <div class="project-info-grid">
-        <div class="project-info-col">
-          <div class="field">
-            <strong>Номер договора:</strong> {{ project.contract_number }}
-          </div>
-          <div class="field">
-            <strong>Вид договора:</strong> {{ project.contract_kind }}
-          </div>
+    <div class="box pc-head-box">
+      <div class="pc-head">
+        <div class="pc-head__title">
+          <h2 class="pc-head__no">{{ project.contract_number }}</h2>
+          <div class="pc-head__sub">{{ project.client_name }} · этап {{ etap_number or '—' }}</div>
         </div>
-
-        <div class="project-info-col">
-          <div class="field"><strong>Заказчик:</strong> {{ project.client_name }}</div>
-          <div class="field"><strong>Исполнитель:</strong> {{ project.executant_name }}</div>
-          <div class="field"><strong>Дата начала проекта:</strong> {{ project.plan_start_date|format_date }}</div>
-          <div class="field"><strong>Дата окончания проекта:</strong> {{ project.plan_end_date|format_date }}</div>
-          <div class="field"><strong>Статус проекта:</strong> {{ project.project_status }}</div>
-          <div class="field"><strong>Номер этапа:</strong> {{ etap_number or '—' }}</div>
-          <div class="field"><strong>Период проверки:</strong> {{ project.period }}</div>
-          <div class="field"><strong>Руководитель проекта:</strong> {{ project.project_chief }}</div>
-          <div class="field"><strong>Сумма по этапу:</strong> {{ project.etap_sum }}</div>
-        </div>
+        <dl class="pc-kv">
+          <div><dt>Статус проекта</dt><dd>{% if project.project_status %}<span class="pc-pill">{{ project.project_status }}</span>{% else %}—{% endif %}</dd></div>
+          <div><dt>Срок проекта</dt><dd>{{ project.plan_start_date|format_date or '—' }} — {{ project.plan_end_date|format_date or '—' }}</dd></div>
+          <div><dt>Руководитель проекта</dt><dd>{{ project.project_chief or '—' }}</dd></div>
+          <div><dt>Исполнитель</dt><dd>{{ project.executant_name or '—' }}</dd></div>
+          <div><dt>Вид договора</dt><dd>{{ project.contract_kind or '—' }}</dd></div>
+          <div><dt>Период проверки</dt><dd>{{ project.period or '—' }}</dd></div>
+          <div><dt>Сумма по этапу</dt><dd>{{ project.etap_sum if project.etap_sum is not none else '—' }}</dd></div>
+        </dl>
       </div>
     </div>
 
-    <div class="box">
-      <h2 class="page-title">Проектное задание</h2>
-
-      <div class="muted block-mb">
-        Договор <strong>{{ contract_number }}</strong>{% if etap_number %}, этап <strong>{{ etap_number }}</strong>{% endif %}
+    <div class="box tk" id="tk-root" data-mode="{{ edit_mode }}">
+      <div class="tk-top">
+        <h2 class="section-title tk-top__title">Проектное задание</h2>
+        <div class="tk-seg" role="tablist" aria-label="Вид отображения задач">
+          <button type="button" id="tk-v-list" class="is-on" role="tab" aria-selected="true">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><rect x="1" y="2" width="14" height="2.4" rx="1"/><rect x="1" y="6.8" width="14" height="2.4" rx="1"/><rect x="1" y="11.6" width="14" height="2.4" rx="1"/></svg>Список
+          </button>
+          <button type="button" id="tk-v-board" role="tab" aria-selected="false">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><rect x="1" y="1" width="4" height="14" rx="1"/><rect x="6" y="1" width="4" height="9" rx="1"/><rect x="11" y="1" width="4" height="11" rx="1"/></svg>Доска
+          </button>
+        </div>
+        <span class="tk-grow"></span>
+        {% if edit_mode == 'all' %}
+          <form id="tk-xlsx" method="post" action="{{ url_for('upload_tasks', contract_number=contract_number, etap_number=etap_number) }}" enctype="multipart/form-data">
+            <input type="file" id="tk-xlsx-file" name="file" accept=".xlsx" hidden />
+            <button type="button" class="button is-light is-small" id="tk-xlsx-btn">Загрузить XLSX</button>
+          </form>
+          <button type="button" class="button is-primary is-small" id="tk-add">+ Добавить задачу</button>
+        {% endif %}
       </div>
 
-      {% if edit_mode == 'view' %}
-        <div class="muted block-mb">
-          Режим просмотра (редактирование недоступно).
+      <div class="tk-unsaved" id="tk-unsaved" role="status" hidden>
+        <span id="tk-unsaved-text"></span>
+        <span class="tk-unsaved__btns">
+          <button type="button" class="button is-primary is-small" id="tk-save">Сохранить изменения</button>
+          <button type="button" class="button is-light is-small" id="tk-discard">Отменить изменения</button>
+        </span>
+      </div>
+
+      <div id="tk-none" class="task-empty" hidden>
+        Нет задач для выбранного проекта/этапа.{% if edit_mode == 'all' %} Добавьте задачу или загрузите XLSX.{% endif %}
+      </div>
+
+      <div id="tk-main">
+        <div class="tk-prog">
+          <div class="tk-prog__bar" id="tk-pbar"></div>
+          <div class="tk-prog__txt" id="tk-ptxt"></div>
         </div>
 
-        {% if tasks|length == 0 %}
-          <div class="task-empty">Нет задач для выбранного проекта/этапа.</div>
-        {% else %}
-          <details class="task-stage" open>
-            <summary>Этап {{ etap_number }} ({{ tasks|length }} задач)</summary>
-            <div class="task-list task-list--scroll">
-              {% for t in tasks %}
-                <article class="task-card">
-                  <div class="task-card__main">
-                    <div class="task-card__head">
-                      <div>
-                        <h3 class="task-card__title">{{ t.task_name or 'Без названия' }}</h3>
-                        <p class="task-card__meta">
-                          {{ t.worker_name or 'Исполнитель не указан' }}
-                          <span class="task-card__meta-sep">·</span>
-                          {{ period_label(t.task_start_date, t.task_end_date) }}
-                        </p>
-                      </div>
-                      <span class="task-status {{ status_class(t.task_status) }}">{{ t.task_status or '—' }}</span>
-                    </div>
-                    {% if t.task_adenda %}
-                      <p class="task-card__desc">{{ t.task_adenda }}</p>
-                    {% endif %}
-                    {% if t.task_comment or t.working_file %}
-                      <dl class="task-card__extras">
-                        {% if t.task_comment %}
-                          <dt>Комментарий</dt>
-                          <dd>{{ t.task_comment }}</dd>
-                        {% endif %}
-                        {% if t.working_file %}
-                          <dt>Рабочий файл</dt>
-                          <dd>{{ t.working_file }}</dd>
-                        {% endif %}
-                      </dl>
-                    {% endif %}
-                  </div>
-                </article>
-              {% endfor %}
-            </div>
-          </details>
-        {% endif %}
-
-      {% elif edit_mode == 'partial' %}
-        <div class="muted block-mb">
-          Частичное редактирование: даты, комментарий, рабочий файл и статус.
-        </div>
-
-        <form method="post" action="{{ url_for('save_tasks', contract_number=contract_number, etap_number=etap_number) }}">
-          <input type="hidden" name="tasks_count" value="{{ tasks|length }}" />
-
-          {% if tasks|length == 0 %}
-            <div class="task-empty">Нет задач для выбранного проекта/этапа.</div>
-          {% else %}
-            <details class="task-stage" open>
-              <summary>Этап {{ etap_number }} ({{ tasks|length }} задач)</summary>
-              <div class="task-list task-list--scroll">
-                {% for t in tasks %}
-                  {% set i = loop.index0 %}
-                  <article class="task-card">
-                    <div class="task-card__main">
-                      <div class="task-card__head">
-                        <div>
-                          <h3 class="task-card__title">{{ t.task_name or 'Без названия' }}</h3>
-                          <p class="task-card__meta">{{ t.worker_name or 'Исполнитель не указан' }}</p>
-                          <input type="hidden" name="task_name_{{ i }}" value="{{ t.task_name }}" />
-                          <textarea name="task_adenda_{{ i }}" hidden>{{ t.task_adenda }}</textarea>
-                          <input type="hidden" name="worker_name_{{ i }}" value="{{ t.worker_name }}" />
-                        </div>
-                        <div class="field task-card__status-field">
-                          <label for="task_status_{{ i }}">Статус</label>
-                          <select id="task_status_{{ i }}" name="task_status_{{ i }}">
-                            {% for s in task_statuses %}
-                              <option value="{{ s }}" {% if s == t.task_status %}selected{% endif %}>{{ s }}</option>
-                            {% endfor %}
-                          </select>
-                        </div>
-                      </div>
-                      {% if t.task_adenda %}
-                        <p class="task-card__desc">{{ t.task_adenda }}</p>
-                      {% endif %}
-                      <div class="task-card__grid">
-                        <div class="field">
-                          <label for="task_start_date_{{ i }}">Дата начала</label>
-                          <input
-                            id="task_start_date_{{ i }}"
-                            type="text"
-                            class="js-date"
-                            name="task_start_date_{{ i }}"
-                            value="{{ t.task_start_date|format_date }}"
-                            placeholder="dd.mm.YYYY"
-                          />
-                        </div>
-                        <div class="field">
-                          <label for="task_end_date_{{ i }}">Дата окончания</label>
-                          <input
-                            id="task_end_date_{{ i }}"
-                            type="text"
-                            class="js-date"
-                            name="task_end_date_{{ i }}"
-                            value="{{ t.task_end_date|format_date }}"
-                            placeholder="dd.mm.YYYY"
-                          />
-                        </div>
-                        <div class="field field--full">
-                          <label for="task_comment_{{ i }}">Комментарий</label>
-                          <input
-                            id="task_comment_{{ i }}"
-                            type="text"
-                            name="task_comment_{{ i }}"
-                            value="{{ t.task_comment }}"
-                          />
-                        </div>
-                        <div class="field field--full">
-                          <label for="working_file_{{ i }}">Рабочий файл</label>
-                          <input
-                            id="working_file_{{ i }}"
-                            type="text"
-                            name="working_file_{{ i }}"
-                            value="{{ t.working_file }}"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  </article>
-                {% endfor %}
-              </div>
-            </details>
-
-            <div class="actions actions--mt-sm">
-              <button type="submit" class="button is-primary">Сохранить</button>
-            </div>
-          {% endif %}
-        </form>
-
-      {% else %}
-        <div class="actions actions--mb-lg">
-          <form method="post" action="{{ url_for('upload_tasks', contract_number=contract_number, etap_number=etap_number) }}" enctype="multipart/form-data">
-            <input type="file" name="file" accept=".xlsx" required />
-            <button type="submit" class="button is-primary">Загрузить</button>
-          </form>
-        </div>
-
-        <div class="muted block-mb-xs">
-          Добавляйте и удаляйте задачи кнопками ниже. Для удаления отметьте карточку и нажмите «Удалить задачу».
-          Пустой список можно заполнить вручную или загрузить XLSX.
-        </div>
-
-        <form id="task-form-full" method="post" action="{{ url_for('save_tasks', contract_number=contract_number, etap_number=etap_number) }}">
-          <input type="hidden" name="tasks_count" id="tasks_count_full" value="{{ tasks|length }}" />
-
-          <div class="task-toolbar">
-            <button type="button" class="button is-light" id="btn-add-task">Добавить задачу</button>
-            <button type="button" class="button is-danger is-light" id="btn-del-task">Удалить задачу</button>
-            <div class="task-toolbar__sort">
-              <span class="task-toolbar__sort-label">Сортировка:</span>
-              <button type="button" class="button is-small is-light btn-sort" data-sort-col="worker">Исполнитель</button>
-              <button type="button" class="button is-small is-light btn-sort" data-sort-col="start">Начало</button>
-              <button type="button" class="button is-small is-light btn-sort" data-sort-col="end">Окончание</button>
-              <button type="button" class="button is-small is-light btn-sort" data-sort-col="status">Статус</button>
-            </div>
+        <div class="tk-filters">
+          <div class="tk-search">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="7" cy="7" r="5"/><path d="m11 11 3.5 3.5"/></svg>
+            <input id="tk-q" type="search" placeholder="Поиск по задаче или описанию" aria-label="Поиск по задачам" />
           </div>
+          <div class="tk-chips" id="tk-chips"></div>
+          <label class="tk-chk"><input type="checkbox" id="tk-over" /> Только просроченные</label>
+          <label class="tk-chk" id="tk-mine-wrap" hidden><input type="checkbox" id="tk-mine" /> Только мои</label>
+        </div>
 
-          <details class="task-stage" open>
-            <summary>Этап {{ etap_number }} (<span id="task-count-label">{{ tasks|length }}</span> задач)</summary>
-            <div class="task-list task-list--scroll" id="task-list-full">
-              {% for t in tasks %}
-                <article class="task-card task-row">
-                  <div class="task-card__select">
-                    <input type="radio" name="task_select" value="1" aria-label="Выбрать задачу для удаления" />
-                  </div>
-                  <div class="task-card__main">
-                    <div class="task-card__head">
-                      <div class="field task-card__title-field">
-                        <label>Задача</label>
-                        <input type="text" data-task-field="task_name" value="{{ t.task_name }}" />
-                      </div>
-                      <div class="field task-card__status-field">
-                        <label>Статус</label>
-                        <select data-task-field="task_status">
-                          <option value="">(не выбран)</option>
-                          {% for s in task_statuses %}
-                            <option value="{{ s }}" {% if s == t.task_status %}selected{% endif %}>{{ s }}</option>
-                          {% endfor %}
-                        </select>
-                      </div>
-                    </div>
-                    <div class="task-card__grid">
-                      <div class="field field--full">
-                        <label>Описание</label>
-                        <textarea data-task-field="task_adenda">{{ t.task_adenda }}</textarea>
-                      </div>
-                      <div class="field">
-                        <label>Исполнитель</label>
-                        <select data-task-field="worker_name">
-                          <option value="">(не выбран)</option>
-                          {% for w in workers %}
-                            <option value="{{ w }}" {% if w == t.worker_name %}selected{% endif %}>{{ w }}</option>
-                          {% endfor %}
-                        </select>
-                      </div>
-                      <div class="field">
-                        <label>Дата начала</label>
-                        <input type="text" class="js-date" data-task-field="task_start_date" value="{{ t.task_start_date|format_date }}" placeholder="dd.mm.YYYY" />
-                      </div>
-                      <div class="field">
-                        <label>Дата окончания</label>
-                        <input type="text" class="js-date" data-task-field="task_end_date" value="{{ t.task_end_date|format_date }}" placeholder="dd.mm.YYYY" />
-                      </div>
-                      <div class="field field--full">
-                        <label>Комментарий</label>
-                        <input type="text" data-task-field="task_comment" value="{{ t.task_comment }}" />
-                      </div>
-                      <div class="field field--full">
-                        <label>Рабочий файл</label>
-                        <input type="text" data-task-field="working_file" value="{{ t.working_file }}" />
-                      </div>
-                    </div>
-                  </div>
-                </article>
-              {% else %}
-                <div class="task-empty" id="task-empty-hint">Задач пока нет. Добавьте вручную или загрузите XLSX.</div>
-              {% endfor %}
-            </div>
-          </details>
-
-          <div class="actions actions--mt-sm">
-            <button type="submit" class="button is-primary">Сохранить</button>
-          </div>
-        </form>
-
-        <script type="application/json" id="task-full-meta">{{ {'workers': workers, 'statuses': task_statuses}|tojson }}</script>
-        <script>
-        (function () {
-          var metaEl = document.getElementById('task-full-meta');
-          var meta = metaEl ? JSON.parse(metaEl.textContent) : { workers: [], statuses: [] };
-          var list = document.getElementById('task-list-full');
-          var form = document.getElementById('task-form-full');
-          var countInput = document.getElementById('tasks_count_full');
-          var countLabel = document.getElementById('task-count-label');
-          var sortState = { col: null, asc: true };
-
-          function escHtml(s) {
-            if (s == null || s === '') return '';
-            var d = document.createElement('div');
-            d.textContent = s;
-            return d.innerHTML;
-          }
-
-          function escAttr(s) {
-            return String(s == null ? '' : s)
-              .replace(/&/g, '&amp;')
-              .replace(/"/g, '&quot;')
-              .replace(/</g, '&lt;');
-          }
-
-          function workerOptionsHtml(selected) {
-            var opts = '<option value="">(не выбран)</option>';
-            (meta.workers || []).forEach(function (w) {
-              var sel = w === selected ? ' selected' : '';
-              opts += '<option value="' + escAttr(w) + '"' + sel + '>' + escHtml(w) + '</option>';
-            });
-            return opts;
-          }
-
-          function statusOptionsHtml(selected) {
-            var opts = '<option value="">(не выбран)</option>';
-            (meta.statuses || []).forEach(function (s) {
-              var sel = s === selected ? ' selected' : '';
-              opts += '<option value="' + escAttr(s) + '"' + sel + '>' + escHtml(s) + '</option>';
-            });
-            return opts;
-          }
-
-          function taskCards() {
-            return list.querySelectorAll('article.task-row');
-          }
-
-          function syncEmptyHint() {
-            var hint = document.getElementById('task-empty-hint');
-            var n = taskCards().length;
-            if (n === 0) {
-              if (!hint) {
-                hint = document.createElement('div');
-                hint.className = 'task-empty';
-                hint.id = 'task-empty-hint';
-                hint.textContent = 'Задач пока нет. Добавьте вручную или загрузите XLSX.';
-                list.appendChild(hint);
-              }
-            } else if (hint) {
-              hint.remove();
-            }
-          }
-
-          function updateCountLabel() {
-            var n = taskCards().length;
-            if (countLabel) countLabel.textContent = String(n);
-            if (countInput) countInput.value = String(n);
-            syncEmptyHint();
-          }
-
-          function reindexTaskRows() {
-            var cards = taskCards();
-            if (countInput) countInput.value = String(cards.length);
-            cards.forEach(function (card, i) {
-              card.querySelectorAll('[data-task-field]').forEach(function (el) {
-                var base = el.getAttribute('data-task-field');
-                el.name = base + '_' + i;
-              });
-            });
-          }
-
-          function syncSelectedClass() {
-            taskCards().forEach(function (card) {
-              var radio = card.querySelector('input[name="task_select"]');
-              card.classList.toggle('is-selected', !!(radio && radio.checked));
-            });
-          }
-
-          function addTaskRow() {
-            var card = document.createElement('article');
-            card.className = 'task-card task-row';
-            card.innerHTML =
-              '<div class="task-card__select">' +
-                '<input type="radio" name="task_select" value="1" aria-label="Выбрать задачу для удаления" />' +
-              '</div>' +
-              '<div class="task-card__main">' +
-                '<div class="task-card__head">' +
-                  '<div class="field task-card__title-field">' +
-                    '<label>Задача</label>' +
-                    '<input type="text" data-task-field="task_name" value="" />' +
-                  '</div>' +
-                  '<div class="field task-card__status-field">' +
-                    '<label>Статус</label>' +
-                    '<select data-task-field="task_status">' + statusOptionsHtml('') + '</select>' +
-                  '</div>' +
-                '</div>' +
-                '<div class="task-card__grid">' +
-                  '<div class="field field--full">' +
-                    '<label>Описание</label>' +
-                    '<textarea data-task-field="task_adenda"></textarea>' +
-                  '</div>' +
-                  '<div class="field">' +
-                    '<label>Исполнитель</label>' +
-                    '<select data-task-field="worker_name">' + workerOptionsHtml('') + '</select>' +
-                  '</div>' +
-                  '<div class="field">' +
-                    '<label>Дата начала</label>' +
-                    '<input type="text" class="js-date" data-task-field="task_start_date" value="" placeholder="dd.mm.YYYY" />' +
-                  '</div>' +
-                  '<div class="field">' +
-                    '<label>Дата окончания</label>' +
-                    '<input type="text" class="js-date" data-task-field="task_end_date" value="" placeholder="dd.mm.YYYY" />' +
-                  '</div>' +
-                  '<div class="field field--full">' +
-                    '<label>Комментарий</label>' +
-                    '<input type="text" data-task-field="task_comment" value="" />' +
-                  '</div>' +
-                  '<div class="field field--full">' +
-                    '<label>Рабочий файл</label>' +
-                    '<input type="text" data-task-field="working_file" value="" />' +
-                  '</div>' +
-                '</div>' +
-              '</div>';
-            list.appendChild(card);
-            if (window.initDatePickers) window.initDatePickers(card);
-            var radio = card.querySelector('input[name="task_select"]');
-            if (radio) {
-              radio.checked = true;
-              syncSelectedClass();
-            }
-            updateCountLabel();
-            card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-            var nameInput = card.querySelector('[data-task-field="task_name"]');
-            if (nameInput) nameInput.focus();
-          }
-
-          function deleteSelectedTask() {
-            var checked = list.querySelector('article.task-row input[name="task_select"]:checked');
-            if (!checked) {
-              alert('Выберите задачу для удаления (кружок слева на карточке).');
-              return;
-            }
-            var card = checked.closest('article.task-row');
-            if (card) card.remove();
-            updateCountLabel();
-            syncSelectedClass();
-          }
-
-          function cellWorker(card) {
-            var sel = card.querySelector('select[data-task-field="worker_name"]');
-            return (sel && sel.value) ? sel.value : '';
-          }
-          function cellStatus(card) {
-            var sel = card.querySelector('select[data-task-field="task_status"]');
-            return (sel && sel.value) ? sel.value : '';
-          }
-          function cellDate(card, field) {
-            var inp = card.querySelector('input[data-task-field="' + field + '"]');
-            var v = (inp && inp.value) ? inp.value.trim() : '';
-            var m = v.match(/^(\d{2})[.\-](\d{2})[.\-](\d{4})$/);
-            if (m) return m[3] + '-' + m[2] + '-' + m[1];
-            return v || '';
-          }
-
-          function sortRows(col) {
-            if (sortState.col === col) sortState.asc = !sortState.asc;
-            else { sortState.col = col; sortState.asc = true; }
-            var asc = sortState.asc;
-            var cards = Array.prototype.slice.call(taskCards());
-            cards.sort(function (a, b) {
-              var va, vb;
-              if (col === 'worker') { va = cellWorker(a); vb = cellWorker(b); }
-              else if (col === 'status') { va = cellStatus(a); vb = cellStatus(b); }
-              else if (col === 'start') { va = cellDate(a, 'task_start_date'); vb = cellDate(b, 'task_start_date'); }
-              else { va = cellDate(a, 'task_end_date'); vb = cellDate(b, 'task_end_date'); }
-              if (va < vb) return asc ? -1 : 1;
-              if (va > vb) return asc ? 1 : -1;
-              return 0;
-            });
-            cards.forEach(function (r) { list.appendChild(r); });
-          }
-
-          document.getElementById('btn-add-task').addEventListener('click', addTaskRow);
-          document.getElementById('btn-del-task').addEventListener('click', deleteSelectedTask);
-          document.querySelectorAll('.task-toolbar .btn-sort').forEach(function (btn) {
-            btn.addEventListener('click', function () {
-              sortRows(btn.getAttribute('data-sort-col'));
-            });
-          });
-          list.addEventListener('change', function (e) {
-            if (e.target && e.target.name === 'task_select') syncSelectedClass();
-          });
-          if (form) {
-            form.addEventListener('submit', function () {
-              reindexTaskRows();
-            });
-          }
-          reindexTaskRows();
-          syncSelectedClass();
-          updateCountLabel();
-        })();
-        </script>
-      {% endif %}
+        <div id="tk-board" class="tk-board" hidden></div>
+        <div id="tk-list" class="tk-lt"></div>
+        <p class="text-hint tk-hint" id="tk-hint"></p>
+      </div>
     </div>
   </div>
+
+  <div class="tk-ov" id="tk-ov"></div>
+  <aside class="tk-dr" id="tk-dr" aria-hidden="true" aria-label="Карточка задачи">
+    <header><h3 id="tk-dr-title">Задача</h3><button type="button" class="button is-light is-small" id="tk-dr-x" aria-label="Закрыть">✕</button></header>
+    <div class="tk-dr__body" id="tk-dr-body"></div>
+    <footer>
+      <button type="button" class="button is-primary is-small" id="tk-dr-save">Применить</button>
+      <button type="button" class="button is-light is-small" id="tk-dr-cancel">Закрыть</button>
+      <span class="tk-grow"></span>
+      <button type="button" class="button is-danger is-light is-small" id="tk-dr-del">Удалить</button>
+    </footer>
+  </aside>
+  <div class="tk-toast" id="tk-toast" role="status" aria-live="polite"><span id="tk-toast-t"></span><button type="button" id="tk-toast-u">Отменить</button></div>
+
+  {# Скрытая форма: сюда скрипт собирает все задачи этапа и отправляет в save_tasks (как раньше). #}
+  <form id="tk-form" method="post" action="{{ url_for('save_tasks', contract_number=contract_number, etap_number=etap_number) }}" hidden></form>
+
+  <script type="application/json" id="tk-data">{{ tasks_ctx|tojson }}</script>
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
+  <script src="{{ url_for('static', filename='js/project-tasks.js') }}"></script>
 {% endblock %}

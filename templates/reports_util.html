@@ -1,0 +1,60 @@
+{# Отчёт по утилизации: одна сортируемая таблица. Контекст: util_employees, util_by_employee, util_total_by_employee, util_period_workdays, util_rate_by_employee, util_colors. #}
+<div class="rp-card">
+  <h3 class="rp-h">Отчет по утилизации</h3>
+  <p class="rp-sub">Утилизация = проектные дни / рабочие дни периода ({{ util_period_workdays }}). Рабочие дни — пн–пт без праздников. Клик по строке раскрывает расшифровку по проектам, клик по заголовку сортирует.</p>
+
+  {% if util_employees|length == 0 %}
+    <div class="muted">Нет сотрудников для отображения.</div>
+  {% else %}
+    <div class="rp-legend">
+      <span><i class="rp-sw" style="background: var(--rp-ok);"></i>85% и выше</span>
+      <span><i class="rp-sw" style="background: var(--color-primary);"></i>60–84%</span>
+      <span><i class="rp-sw" style="background: var(--rp-warn);"></i>30–59%</span>
+      <span><i class="rp-sw" style="background: var(--rp-bad);"></i>менее 30%</span>
+    </div>
+    <div class="rp-tw">
+      <table class="rp-table" data-sortable data-default-sort="pct:desc" id="rp-util">
+        <thead>
+          <tr>
+            <th data-sort="name" data-type="text">Сотрудник</th>
+            <th class="num" data-sort="days" data-type="num">Проектных дней</th>
+            <th class="num rp-static">Рабочих дней</th>
+            <th data-sort="pct" data-type="num">Утилизация</th>
+            <th class="rp-static">Состав проектов</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for w in util_employees %}
+            {% set days = util_total_by_employee[w] %}
+            {% set pct = util_rate_by_employee.get(w, 0) %}
+            {% set tone = 'ok' if pct >= 85 else ('blue' if pct >= 60 else ('warn' if pct >= 30 else 'bad')) %}
+            <tr class="rp-main" data-name="{{ w|lower }}" data-sort-name="{{ w|lower }}" data-sort-days="{{ days }}" data-sort-pct="{{ '%.2f'|format(pct) }}" tabindex="0" aria-expanded="false">
+              <td><div class="rp-who"><span class="rp-chev">▶</span><span class="rp-av" style="background: hsl({{ w|name_hue }} 52% 42%);">{{ w|initials }}</span>{{ w }}</div></td>
+              <td class="num">{{ days }}</td>
+              <td class="num muted">{{ util_period_workdays }}</td>
+              <td><div class="rp-meter"><div class="rp-bar"><i class="is-{{ tone }}" style="width: {{ [pct, 100]|min }}%;"></i></div><b>{{ '%.0f'|format(pct) }}%</b></div></td>
+              <td>
+                <div class="rp-stack" title="{% for c, d in util_by_employee[w].items() %}{{ c }}: {{ d }} дн.&#10;{% endfor %}">
+                  {% for c, d in util_by_employee[w].items() %}{% if days %}<i style="width: {{ d / days * 100 }}%; background: {{ util_colors.get(c, '#64748b') }};"></i>{% endif %}{% endfor %}
+                </div>
+              </td>
+            </tr>
+            <tr class="rp-detail" data-detail-for="{{ w|lower }}" hidden>
+              <td colspan="5">
+                {% if util_by_employee[w] %}
+                  <div class="rp-dgrid">
+                    {% for c, d in util_by_employee[w].items() %}
+                      <div class="rp-dr"><i class="rp-sw" style="background: {{ util_colors.get(c, '#64748b') }};"></i><span class="rp-dn"><b>{{ c }}</b></span><b>{{ d }} дн.</b></div>
+                    {% endfor %}
+                  </div>
+                {% else %}
+                  <span class="muted">Нет задач по проектам в выбранном периоде.</span>
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endif %}
+</div>
