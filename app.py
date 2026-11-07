@@ -28,6 +28,7 @@ from db import (
     voyage_row_exists,
     fetch_project_statuses,
     fetch_project_status_catalog,
+    fetch_planning_projects,
     fetch_projects,
     fetch_project_tasks,
     fetch_tasks_date_bounds_for_reports,
@@ -71,9 +72,14 @@ from utils import (
     verify_worker_password,
 )
 from reports_service import (
+    PLAN_ALLOWED_WEEKS,
+    PLAN_DEFAULT_NORM,
+    PLAN_DEFAULT_WEEKS,
     TaskInterval,
     build_execution_report,
     build_gantt_model,
+    build_planning_report,
+    planning_monday,
     build_utilisation_model,
     daterange_inclusive,
     employee_project_workdays,
@@ -654,6 +660,85 @@ def create_app() -> Flask:
             edit_mode=mode,
         )
 
+    def render_planning_report(role: str, is_director: bool):
+        """Отчёт «Планирование проектов»: недели × проекты, нагрузка руководителей, поиск свободных окон."""
+        args = request.args
+        today = dt.date.today()
+        submitted = args.get("plan_submit") == "1"  # у неотмеченного чекбокса в GET нет значения
+
+        start = planning_monday(today) - dt.timedelta(weeks=1)
+        raw_start = args.get("plan_start", "").strip()
+        if raw_start:
+            try:
+                start = planning_monday(parse_date_from_ddmmyyyy(raw_start))
+            except Exception:
+                flash("Неверный формат даты начала периода (ожидается dd.mm.YYYY).", "error")
+
+        def int_arg(name: str, default: int, lo: int, hi: int) -> int:
+            try:
+                return min(hi, max(lo, int(args.get(name, "").strip())))
+            except (TypeError, ValueError):
+                return default
+
+        weeks = int_arg("plan_weeks", PLAN_DEFAULT_WEEKS, 1, 104)
+        if weeks not in PLAN_ALLOWED_WEEKS:
+            weeks = PLAN_DEFAULT_WEEKS
+        norm = int_arg("norm", PLAN_DEFAULT_NORM, 1, 12)
+        fw_len = int_arg("fw_len", 4, 1, 52)
+        fw_lim = int_arg("fw_lim", 2, 0, 12)
+        do_find = args.get("find") == "1"
+
+        # Руководитель проекта видит только свои проекты, Директор — всех.
+        chief = (args.get("project_chief", "").strip() or None) if is_director else None
+        contract_kind = args.get("contract_kind", "").strip() or None
+        show_done = args.get("show_done") == "1" if submitted else True
+        show_cancel = args.get("show_cancel") == "1" if submitted else False
+        group = args.get("group") == "1" if submitted else True
+
+        rows = fetch_planning_projects(worker_role=role, current_short_name=current_short_name())
+        plan = build_planning_report(
+            rows,
+            start=start,
+            weeks=weeks,
+            norm=norm,
+            today=today,
+            chief=chief,
+            contract_kind=contract_kind,
+            show_done=show_done,
+            show_cancel=show_cancel,
+            find_len=fw_len if do_find else None,
+            find_limit=fw_lim if do_find else None,
+        )
+        plan_form = {
+            "start": plan["start"].strftime("%d.%m.%Y"),
+            "weeks": weeks,
+            "chief": chief or "",
+            "kind": contract_kind or "",
+            "show_done": show_done,
+            "show_cancel": show_cancel,
+            "group": group,
+            "norm": norm,
+            "fw_len": fw_len,
+            "fw_lim": fw_lim,
+            "allowed_weeks": PLAN_ALLOWED_WEEKS,
+            "current_monday": planning_monday(today).strftime("%d.%m.%Y"),
+        }
+        return render_template(
+            "reports.html",
+            report_type="plan",
+            is_director=is_director,
+            plan=plan,
+            plan_form=plan_form,
+            date_start="",
+            date_end="",
+            contract_kind=None,
+            contract_number=None,
+            project_chief=None,
+            contract_kinds=[],
+            contract_numbers=[],
+            project_chiefs=[],
+        )
+
     @app.get("/reports")
     def reports():
         redir = require_login()
@@ -663,12 +748,16 @@ def create_app() -> Flask:
         role = current_role()
 
         report_type = request.args.get("report_type", "").strip().lower()
-        if report_type not in {"gant", "util", "econ", "exec"}:
+        if report_type not in {"gant", "util", "econ", "exec", "plan"}:
             report_type = "gant" if role in {"Директор", "Руководитель проекта"} else "exec"
 
         is_director = role == "Директор"
         if report_type == "gant" and role not in {"Директор", "Руководитель проекта"}:
             return redirect(url_for("reports", report_type="exec"))
+        if report_type == "plan":
+            if role not in {"Директор", "Руководитель проекта"}:
+                return redirect(url_for("reports", report_type="exec"))
+            return render_planning_report(role, is_director)
         if report_type == "util" and not is_director:
             flash("Отчёт по утилизации не доступен.", "error")
             fallback = "gant" if role == "Руководитель проекта" else "exec"

@@ -1,0 +1,263 @@
+{# Отчёт «Планирование проектов». Подключается из reports.html; данные: plan (build_planning_report), plan_form. #}
+{% set P = plan %}
+{% set F = plan_form %}
+{% set base_args = {
+  'report_type': 'plan',
+  'plan_submit': 1,
+  'plan_weeks': F.weeks,
+  'project_chief': F.chief,
+  'contract_kind': F.kind,
+  'norm': F.norm,
+  'fw_len': F.fw_len,
+  'fw_lim': F.fw_lim,
+} %}
+
+<div class="box po-mb plan-filters-box">
+  <form method="get" action="{{ url_for('reports') }}" id="plan-form">
+    <input type="hidden" name="report_type" value="plan" />
+    <input type="hidden" name="plan_submit" value="1" />
+
+    <div class="plan-filters">
+      <div>
+        <label class="label" for="plan-start">Начало периода (неделя с понедельника)</label>
+        <input id="plan-start" type="text" class="js-date" name="plan_start" value="{{ F.start }}" placeholder="dd.mm.YYYY" />
+      </div>
+      <div>
+        <label class="label" for="plan-weeks">Ширина периода</label>
+        <select id="plan-weeks" name="plan_weeks">
+          {% for w in F.allowed_weeks %}
+            <option value="{{ w }}" {% if F.weeks == w %}selected{% endif %}>{{ w }} {{ 'неделя' if w % 10 == 1 and w % 100 != 11 else ('недели' if w % 10 in [2, 3, 4] and w % 100 not in [12, 13, 14] else 'недель') }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      {% if is_director %}
+      <div>
+        <label class="label" for="plan-chief">Руководитель проекта</label>
+        <select id="plan-chief" name="project_chief">
+          <option value="" {% if not F.chief %}selected{% endif %}>(все)</option>
+          {% for ch in P.chiefs_all %}
+            <option value="{{ ch }}" {% if F.chief == ch %}selected{% endif %}>{{ ch }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      {% endif %}
+      <div>
+        <label class="label" for="plan-kind">Вид договора</label>
+        <select id="plan-kind" name="contract_kind">
+          <option value="" {% if not F.kind %}selected{% endif %}>(все)</option>
+          {% for k in P.kinds %}
+            <option value="{{ k }}" {% if F.kind == k %}selected{% endif %}>{{ k }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="plan-nav" role="group" aria-label="Сдвиг периода">
+        <button type="button" class="button is-light is-small js-plan-shift" data-weeks="-4">◀ 4 нед.</button>
+        <button type="button" class="button is-light is-small js-plan-shift" data-current="1">К текущей неделе</button>
+        <button type="button" class="button is-light is-small js-plan-shift" data-weeks="4">4 нед. ▶</button>
+      </div>
+    </div>
+
+    <div class="plan-checks">
+      <label><input type="checkbox" name="show_done" value="1" {% if F.show_done %}checked{% endif %} /> Показывать завершённые проекты</label>
+      <label><input type="checkbox" name="show_cancel" value="1" {% if F.show_cancel %}checked{% endif %} /> Показывать отменённые</label>
+      <label><input type="checkbox" name="group" value="1" {% if F.group %}checked{% endif %} /> Группировать по руководителям</label>
+      {% if F.group %}
+      <span class="plan-checks__right">
+        <button type="button" class="button is-light is-small" id="plan-collapse-all">Свернуть всех (только нагрузка)</button>
+        <button type="button" class="button is-light is-small" id="plan-expand-all">Развернуть всех</button>
+      </span>
+      {% endif %}
+    </div>
+
+    <div class="plan-tools">
+      <span class="plan-tools__title">Подобрать свободное окно:</span>
+      <span class="text-hint">длительностью от</span>
+      <input class="plan-num" type="number" name="fw_len" value="{{ F.fw_len }}" min="1" max="52" aria-label="Длительность окна, недель" />
+      <span class="text-hint">нед., при нагрузке не более</span>
+      <input class="plan-num" type="number" name="fw_lim" value="{{ F.fw_lim }}" min="0" max="12" aria-label="Допустимое число проектов одновременно" />
+      <span class="text-hint">проектов одновременно</span>
+      <button type="submit" name="find" value="1" class="button is-primary is-small">Найти</button>
+      {% if P.do_find %}<button type="submit" name="find" value="0" class="button is-light is-small">Сбросить</button>{% endif %}
+    </div>
+    {% if P.do_find %}
+    <div class="plan-chips" id="plan-find-results">
+      {% for r in P.find_results %}
+        <button type="button" class="plan-chip" data-chief="{{ r.chief }}" data-idx="{{ r.start_idx }}"><b>{{ r.chief }}</b> · {{ r.from }} – {{ r.to }} ({{ r.len }} {{ r.len_word }})</button>
+      {% else %}
+        <span class="text-hint">В выбранном периоде подходящих окон нет — уменьшите длительность или увеличьте допустимую нагрузку. Окна ищутся, начиная с текущей недели.</span>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="plan-tools">
+      <span class="plan-tools__title">Норма нагрузки:</span>
+      <span class="text-hint">до</span>
+      <input class="plan-num" type="number" name="norm" value="{{ F.norm }}" min="1" max="12" aria-label="Норма проектов одновременно" />
+      <span class="text-hint">проектов одновременно на одного руководителя (выше нормы цвет меняется на жёлтый и красный)</span>
+    </div>
+
+    <div class="actions actions--mt-sm">
+      <button type="submit" class="button is-primary">Применить</button>
+    </div>
+  </form>
+</div>
+
+<div class="box">
+  <h3 class="section-title">Планирование проектов</h3>
+
+  <div class="plan-legend">
+    <span><i class="plan-sw plan-sw--plan"></i>Запланирован</span>
+    <span><i class="plan-sw plan-sw--work"></i>В работе</span>
+    <span><i class="plan-sw plan-sw--done"></i>Завершён / закрыт</span>
+    <span><i class="plan-sw plan-sw--cancel"></i>Отмена</span>
+    <span class="plan-legend__sep">Нагрузка:</span>
+    <span><i class="plan-sw plan-sw--l0"></i>свободен</span>
+    <span><i class="plan-sw plan-sw--l1"></i>до нормы ({{ P.norm }})</span>
+    <span><i class="plan-sw plan-sw--l2"></i>норма +1</span>
+    <span><i class="plan-sw plan-sw--l3"></i>перегруз</span>
+    <span><i class="plan-sw plan-sw--win"></i>найденное окно</span>
+  </div>
+
+  {% if P.skipped_invalid %}
+    <div class="text-hint">Не показано проектов с некорректными плановыми датами: {{ P.skipped_invalid }}.</div>
+  {% endif %}
+
+  {% if not P.groups %}
+    <div class="muted">Нет проектов для отображения.</div>
+  {% else %}
+  <div class="plan-gx" id="plan-gx">
+    <div class="plan-in" style="--plan-wk: {{ P.week_px }}px; --plan-n: {{ P.weeks|length }};">
+      <div class="plan-hd">
+        <div class="plan-row">
+          <div class="plan-lc plan-corner">Договор · этап · заказчик{% if not F.group %} · руководитель{% endif %}</div>
+          <div class="plan-rc plan-flex">
+            {% for m in P.months %}<div class="plan-m" style="width: calc(var(--plan-wk) * {{ m.span }});">{{ m.label }}</div>{% endfor %}
+          </div>
+        </div>
+        <div class="plan-row">
+          <div class="plan-lc plan-corner plan-corner--sub">Неделя (№, понедельник)</div>
+          <div class="plan-rc plan-flex">
+            {% for w in P.weeks %}<div class="plan-w{% if w.is_current %} is-current{% endif %}"><b>{{ w.iso_week }}</b>{{ w.label }}</div>{% endfor %}
+          </div>
+        </div>
+      </div>
+
+      <div class="plan-row plan-row--tot">
+        <div class="plan-lc">Всего проектов в работе (все руководители)</div>
+        <div class="plan-rc plan-flex">
+          {% for t in P.totals %}<div class="plan-ld plan-ld--tot" style="--a: {{ t.alpha }};" title="{{ t.title }}">{{ t.n if t.n else '' }}</div>{% endfor %}
+        </div>
+      </div>
+
+      {% if F.group %}
+        {% for g in P.groups %}
+          {% set gi = loop.index %}
+          <div class="plan-row plan-row--grp" data-g="{{ gi }}" data-name="{{ g.name }}">
+            <div class="plan-lc plan-grp-toggle" role="button" tabindex="0" aria-expanded="true" aria-label="Свернуть или развернуть {{ g.name }}">
+              <span class="plan-chev">▼</span><span class="plan-grp-name">{{ g.name }}</span>
+              <span class="plan-grp-meta">в периоде: {{ g.count }} · пик: {{ g.peak }}</span>
+            </div>
+            <div class="plan-rc plan-flex plan-rc--rel">
+              {% for c in g.cells %}<div class="plan-ld plan-ld--{{ c.cls }}{% if c.is_current %} is-current{% endif %}" style="--a: {{ c.alpha }};" title="{{ c.title }}">{{ c.n }}</div>{% endfor %}
+              {% for w in g.windows %}<div class="plan-win" data-idx="{{ w.start_idx }}" style="left: calc(var(--plan-wk) * {{ w.start_idx }}); width: calc(var(--plan-wk) * {{ w.len }});"></div>{% endfor %}
+            </div>
+          </div>
+          {% for b in g.projects %}
+            {% include "reports_planning_row.html" %}
+          {% else %}
+            <div class="plan-row plan-row--prj plan-row--empty" data-parent="{{ gi }}">
+              <div class="plan-lc"><div class="plan-p2">Нет проектов в выбранном периоде</div></div>
+              <div class="plan-rc plan-grid"></div>
+            </div>
+          {% endfor %}
+        {% endfor %}
+      {% else %}
+        {% set gi = 0 %}
+        {% set show_chief = true %}
+        {% for b in P.flat_projects %}
+          {% include "reports_planning_row.html" %}
+        {% else %}
+          <div class="plan-empty">Нет проектов в выбранном периоде.</div>
+        {% endfor %}
+      {% endif %}
+
+      {% if P.today_offset is not none %}
+        <div class="plan-today" style="left: calc(var(--plan-left) + var(--plan-wk) * {{ P.today_offset }});"><span>Сегодня</span></div>
+      {% endif %}
+    </div>
+  </div>
+  <p class="text-hint stack-mt">Колонка = одна неделя (пн–вс). В строке руководителя число — сколько его проектов идёт в эту неделю. Наведите на полосу проекта, чтобы увидеть точные даты, длительность и статус. Нагрузка считается по всем проектам руководителя (кроме отменённых), независимо от фильтров вида договора и показа завершённых.</p>
+  {% endif %}
+</div>
+
+<script>
+  (function () {
+    var gx = document.getElementById('plan-gx');
+    var form = document.getElementById('plan-form');
+
+    // --- сдвиг периода кнопками ◀ ▶ и «К текущей неделе»
+    function pad(n) { return n < 10 ? '0' + n : String(n); }
+    function fmt(d) { return pad(d.getDate()) + '.' + pad(d.getMonth() + 1) + '.' + d.getFullYear(); }
+    function parse(s) {
+      var m = /^(\d{2})\.(\d{2})\.(\d{4})$/.exec((s || '').trim());
+      return m ? new Date(+m[3], +m[2] - 1, +m[1]) : null;
+    }
+    var startEl = document.getElementById('plan-start');
+    document.querySelectorAll('.js-plan-shift').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        if (!startEl || !form) return;
+        var d;
+        if (btn.getAttribute('data-current')) {
+          // понедельник текущей недели, минус неделя назад для контекста
+          d = new Date(); d.setHours(0, 0, 0, 0);
+          d.setDate(d.getDate() - ((d.getDay() + 6) % 7) - 7);
+        } else {
+          d = parse(startEl.value) || new Date();
+          d.setDate(d.getDate() + 7 * parseInt(btn.getAttribute('data-weeks') || '0', 10));
+        }
+        startEl.value = fmt(d);
+        if (window.setDateInput) window.setDateInput(startEl, fmt(d));
+        form.submit();
+      });
+    });
+
+    if (!gx) return;
+
+    // --- сворачивание групп руководителей
+    function setGroup(row, open) {
+      var gi = row.getAttribute('data-g');
+      var toggle = row.querySelector('.plan-grp-toggle');
+      toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+      toggle.querySelector('.plan-chev').textContent = open ? '▼' : '▶';
+      gx.querySelectorAll('[data-parent="' + gi + '"]').forEach(function (r) { r.hidden = !open; });
+    }
+    gx.querySelectorAll('.plan-row--grp').forEach(function (row) {
+      var toggle = row.querySelector('.plan-grp-toggle');
+      function flip() { setGroup(row, toggle.getAttribute('aria-expanded') !== 'true'); }
+      toggle.addEventListener('click', flip);
+      toggle.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); flip(); }
+      });
+    });
+    function setAll(open) { gx.querySelectorAll('.plan-row--grp').forEach(function (row) { setGroup(row, open); }); }
+    var c1 = document.getElementById('plan-collapse-all'), c2 = document.getElementById('plan-expand-all');
+    if (c1) c1.addEventListener('click', function () { setAll(false); });
+    if (c2) c2.addEventListener('click', function () { setAll(true); });
+
+    // --- переход к найденному окну
+    document.querySelectorAll('.plan-chip').forEach(function (chip) {
+      chip.addEventListener('click', function () {
+        var name = chip.getAttribute('data-chief'), idx = parseInt(chip.getAttribute('data-idx'), 10) || 0;
+        var wk = parseFloat(getComputedStyle(gx.querySelector('.plan-in')).getPropertyValue('--plan-wk')) || 46;
+        var row = null;
+        gx.querySelectorAll('.plan-row--grp').forEach(function (r) { if (r.getAttribute('data-name') === name) row = r; });
+        gx.scrollTo({
+          left: Math.max(0, idx * wk - 40),
+          top: row ? Math.max(0, row.offsetTop - 90) : gx.scrollTop,
+          behavior: 'smooth'
+        });
+        gx.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      });
+    });
+  })();
+</script>

@@ -21,9 +21,17 @@
       <li class="{% if report_type == 'exec' %}is-active{% endif %}">
         <a href="{{ url_for('reports', report_type='exec', date_start=date_start, date_end=date_end, contract_number=contract_number or '', project_chief=project_chief or '') }}">Выполнение задач</a>
       </li>
+      {% if current_user.worker_role in ['Директор', 'Руководитель проекта'] %}
+      <li class="{% if report_type == 'plan' %}is-active{% endif %}">
+        <a href="{{ url_for('reports', report_type='plan') }}">Планирование проектов</a>
+      </li>
+      {% endif %}
     </ul>
   </div>
 
+  {% if report_type == 'plan' %}
+    {% include "reports_planning.html" %}
+  {% else %}
   <div class="box po-mb">
     <form method="get" action="{{ url_for('reports') }}" id="reports-filter-form">
       <input type="hidden" name="report_type" value="{{ report_type }}" />
@@ -113,6 +121,7 @@
       </div>
     </form>
   </div>
+  {% endif %}
 
   {% if report_type == 'gant' %}
     <div class="box">

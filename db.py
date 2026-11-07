@@ -885,6 +885,44 @@ def fetch_report_project_chiefs(worker_role: str, current_short_name: str) -> Li
         return [r[0] for r in rows]
 
 
+def fetch_planning_projects(*, worker_role: str, current_short_name: str) -> List[Dict[str, Any]]:
+    """
+    Проекты для отчёта «Планирование проектов» (таблица projects, плановые сроки).
+
+    Директор видит все проекты, Руководитель проекта — только те, где он указан в project_chief.
+    Строки без плановых дат пропускаются. Даты возвращаются в ISO (YYYY-MM-DD).
+    """
+    where = [
+        "plan_start_date IS NOT NULL",
+        "plan_end_date IS NOT NULL",
+        "date(plan_start_date) IS NOT NULL",
+        "date(plan_end_date) IS NOT NULL",
+    ]
+    params: List[Any] = []
+    if worker_role == CHIEF_ROLE:
+        where.append("TRIM(project_chief) = TRIM(?)")
+        params.append(current_short_name)
+    with get_connection() as con:
+        rows = con.execute(
+            f"""
+            SELECT
+                contract_number,
+                etap_number,
+                contract_kind,
+                client_name,
+                project_chief,
+                project_status,
+                date(plan_start_date) AS plan_start,
+                date(plan_end_date) AS plan_end
+            FROM projects
+            WHERE {" AND ".join(where)}
+            ORDER BY date(plan_start_date), contract_number, etap_number
+            """,
+            params,
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
 def _execution_role_filters(
     *,
     worker_role: str,

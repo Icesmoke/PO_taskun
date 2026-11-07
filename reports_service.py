@@ -316,3 +316,305 @@ def build_execution_report(
         out.append(worker)
     return out
 
+
+
+# ---------------------------------------------------------------------------
+# Отчёт «Планирование проектов»: проекты по неделям и нагрузка руководителей
+# ---------------------------------------------------------------------------
+
+PLAN_WEEK_PX = 46  # ширина колонки-недели; то же значение задаётся в CSS через --plan-wk
+PLAN_ALLOWED_WEEKS = (13, 26, 39, 52)
+PLAN_DEFAULT_WEEKS = 26
+PLAN_DEFAULT_NORM = 4
+PLAN_NO_CHIEF = "— не назначен —"
+_PLAN_MONTHS = [
+    "Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",
+    "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь",
+]
+
+
+def planning_monday(d: dt.date) -> dt.date:
+    return d - dt.timedelta(days=d.weekday())
+
+
+def _plural_ru(n: int, one: str, few: str, many: str) -> str:
+    m100, m10 = n % 100, n % 10
+    if 10 < m100 < 20:
+        return many
+    if m10 == 1:
+        return one
+    if 2 <= m10 <= 4:
+        return few
+    return many
+
+
+def planning_status_class(status: object) -> str:
+    st = str(status or "").strip().casefold()
+    if st == "отмена":
+        return "cancel"
+    if st == "в работе":
+        return "work"
+    if st == "запланирован":
+        return "plan"
+    return "done"
+
+
+def _format_contract_kind(value: object) -> str:
+    if value is None or str(value).strip() == "":
+        return ""
+    try:
+        f = float(value)
+        return str(int(f)) if f == int(f) else str(f)
+    except (TypeError, ValueError):
+        return str(value).strip()
+
+
+def _planning_load_class(n: int, norm: int) -> Tuple[str, float]:
+    """CSS-класс и прозрачность заливки для числа проектов руководителя в неделю."""
+    if n <= 0:
+        return "l0", 0.0
+    if n <= norm:
+        return "l1", round(0.12 + 0.40 * n / norm, 2)
+    if n == norm + 1:
+        return "l2", 0.0
+    return "l3", 0.0
+
+
+def build_planning_report(
+    rows: Sequence[Dict[str, Any]],
+    *,
+    start: dt.date,
+    weeks: int,
+    norm: int,
+    today: dt.date,
+    chief: Optional[str] = None,
+    contract_kind: Optional[str] = None,
+    show_done: bool = True,
+    show_cancel: bool = False,
+    find_len: Optional[int] = None,
+    find_limit: Optional[int] = None,
+) -> Dict[str, Any]:
+    """
+    Недельная диаграмма проектов (plan_start_date … plan_end_date) и нагрузка руководителей.
+
+    Нагрузка = число проектов руководителя, пересекающих неделю (пн–вс). Считается по всем
+    его проектам, кроме отменённых, независимо от фильтров вида договора и показа завершённых.
+    Записи «Отпуск …» (учёт отсутствий) в отчёт не попадают.
+    """
+    start = planning_monday(start)
+    weeks = max(1, int(weeks))
+    norm = max(1, int(norm))
+    end = start + dt.timedelta(days=7 * weeks - 1)
+    cur_monday = planning_monday(today)
+
+    # --- нормализация строк
+    items: List[Dict[str, Any]] = []
+    seen: Set[Tuple[str, str, dt.date, dt.date]] = set()
+    skipped_invalid = 0
+    for r in rows:
+        contract = str(r.get("contract_number") or "").strip()
+        if contract.casefold().startswith("отпуск"):
+            continue
+        try:
+            p_start = dt.date.fromisoformat(str(r.get("plan_start"))[:10])
+            p_end = dt.date.fromisoformat(str(r.get("plan_end"))[:10])
+        except (TypeError, ValueError):
+            skipped_invalid += 1
+            continue
+        if p_end < p_start:
+            skipped_invalid += 1
+            continue
+        etap = str(r.get("etap_number") if r.get("etap_number") is not None else "").strip()
+        key = (contract, etap, p_start, p_end)
+        if key in seen:
+            continue
+        seen.add(key)
+        status = str(r.get("project_status") or "").strip()
+        items.append(
+            {
+                "contract": contract,
+                "etap": etap,
+                "kind": _format_contract_kind(r.get("contract_kind")),
+                "client": str(r.get("client_name") or "").strip(),
+                "chief": str(r.get("project_chief") or "").strip() or PLAN_NO_CHIEF,
+                "status": status,
+                "cls": planning_status_class(status),
+                "start": p_start,
+                "end": p_end,
+            }
+        )
+
+    # --- сетка недель и месяцев
+    week_list: List[Dict[str, Any]] = []
+    months: List[Dict[str, Any]] = []
+    for i in range(weeks):
+        monday = start + dt.timedelta(weeks=i)
+        thursday = monday + dt.timedelta(days=3)
+        week_list.append(
+            {
+                "monday": monday,
+                "sunday": monday + dt.timedelta(days=6),
+                "iso_week": thursday.isocalendar()[1],
+                "label": monday.strftime("%d.%m"),
+                "is_current": monday == cur_monday,
+            }
+        )
+        key_m = (thursday.year, thursday.month)
+        if months and months[-1]["key"] == key_m:
+            months[-1]["span"] += 1
+        else:
+            months.append({"key": key_m, "span": 1, "label": f"{_PLAN_MONTHS[thursday.month - 1]} {thursday.year}"})
+
+    # --- нагрузка по руководителям и неделям
+    chiefs_all = sorted({it["chief"] for it in items}, key=lambda s: s.casefold())
+    counted = [it for it in items if it["cls"] != "cancel"]
+    load: Dict[str, List[int]] = {c: [0] * weeks for c in chiefs_all}
+    for it in counted:
+        for i, w in enumerate(week_list):
+            if it["start"] <= w["sunday"] and it["end"] >= w["monday"]:
+                load[it["chief"]][i] += 1
+    totals_n = [sum(load[c][i] for c in chiefs_all) for i in range(weeks)]
+    tot_max = max([1] + totals_n)
+    totals = [
+        {
+            "n": n,
+            "alpha": round(0.5 * n / tot_max, 2),
+            "title": f"Неделя {week_list[i]['iso_week']}: {n} {_plural_ru(n, 'проект', 'проекта', 'проектов')} у всех руководителей",
+        }
+        for i, n in enumerate(totals_n)
+    ]
+
+    # --- рабочие дни для подсказок
+    cal: Optional[WorkdayCalendar] = None
+    if items:
+        cal = calendar_for_period(min(it["start"] for it in items), max(it["end"] for it in items))
+
+    def duration_text(it: Dict[str, Any]) -> str:
+        cal_days = (it["end"] - it["start"]).days + 1
+        wd = len(cal.workdays_inclusive(it["start"], it["end"])) if cal else 0
+        weeks_f = f"{cal_days / 7:.1f}".replace(".", ",")
+        return f"{cal_days} кал. дн. (~{weeks_f} нед.), {wd} раб. дн."
+
+    def to_bar(it: Dict[str, Any]) -> Dict[str, Any]:
+        a, b = max(it["start"], start), min(it["end"], end)
+        left_w = (a - start).days / 7
+        width_w = max(6 / PLAN_WEEK_PX, ((b - a).days + 1) / 7)
+        px = width_w * PLAN_WEEK_PX
+        s_txt, e_txt = it["start"].strftime("%d.%m"), it["end"].strftime("%d.%m")
+        label = f"{s_txt} – {e_txt}" if px >= 118 else (s_txt if px >= 70 else "")
+        tip = (
+            f"Договор {it['contract']}, этап {it['etap'] or '—'}\n"
+            f"{it['client']}\n"
+            f"Руководитель: {it['chief']}\n"
+            f"Срок: {it['start'].strftime('%d.%m.%Y')} – {it['end'].strftime('%d.%m.%Y')}\n"
+            f"Длительность: {duration_text(it)}\n"
+            f"Статус: {it['status'] or '—'}"
+        )
+        return {
+            "contract": it["contract"],
+            "etap": it["etap"],
+            "client": it["client"],
+            "chief": it["chief"],
+            "cls": it["cls"],
+            "left": round(left_w, 4),
+            "width": round(width_w, 4),
+            "clip_l": it["start"] < start,
+            "clip_r": it["end"] > end,
+            "label": label,
+            "title": tip,
+        }
+
+    # --- видимые проекты
+    def is_visible(it: Dict[str, Any]) -> bool:
+        if it["end"] < start or it["start"] > end:
+            return False
+        if contract_kind and it["kind"] != contract_kind:
+            return False
+        if it["cls"] == "done" and not show_done:
+            return False
+        if it["cls"] == "cancel" and not show_cancel:
+            return False
+        return True
+
+    shown_chiefs = [c for c in chiefs_all if not chief or c == chief]
+    do_find = find_len is not None and find_limit is not None
+    find_results: List[Dict[str, Any]] = []
+    groups: List[Dict[str, Any]] = []
+    for c in shown_chiefs:
+        mine = sorted(
+            (it for it in items if it["chief"] == c and is_visible(it)),
+            key=lambda x: (x["start"], x["end"], x["contract"]),
+        )
+        cells = []
+        for i, n in enumerate(load[c]):
+            cls, alpha = _planning_load_class(n, norm)
+            w = week_list[i]
+            cells.append(
+                {
+                    "n": n,
+                    "cls": cls,
+                    "alpha": alpha,
+                    "is_current": w["is_current"],
+                    "title": f"{c} · неделя {w['iso_week']} ({w['monday'].strftime('%d.%m')}–{w['sunday'].strftime('%d.%m')}): "
+                    f"{n} {_plural_ru(n, 'проект', 'проекта', 'проектов')}",
+                }
+            )
+        windows: List[Dict[str, Any]] = []
+        if do_find:
+            run_start = -1
+            for i in range(weeks + 1):
+                # окна ищем только с текущей недели: прошлое для планирования не нужно
+                ok = i < weeks and load[c][i] <= find_limit and week_list[i]["sunday"] >= today
+                if ok and run_start < 0:
+                    run_start = i
+                if not ok and run_start >= 0:
+                    length = i - run_start
+                    if length >= find_len:
+                        windows.append({"start_idx": run_start, "len": length})
+                        find_results.append(
+                            {
+                                "chief": c,
+                                "start_idx": run_start,
+                                "len": length,
+                                "len_word": _plural_ru(length, "неделя", "недели", "недель"),
+                                "from": week_list[run_start]["monday"].strftime("%d.%m"),
+                                "to": week_list[i - 1]["sunday"].strftime("%d.%m"),
+                            }
+                        )
+                    run_start = -1
+        groups.append(
+            {
+                "name": c,
+                "cells": cells,
+                "count": sum(1 for it in mine if it["cls"] != "cancel"),
+                "peak": max(load[c]) if load[c] else 0,
+                "windows": windows,
+                "projects": [to_bar(it) for it in mine],
+            }
+        )
+
+    flat = sorted(
+        (it for it in items if is_visible(it) and (not chief or it["chief"] == chief)),
+        key=lambda x: (x["start"], x["end"], x["contract"]),
+    )
+    today_offset = None
+    if start <= today <= end:
+        today_offset = round((today - start).days / 7 + 1 / 14, 4)
+
+    return {
+        "start": start,
+        "end": end,
+        "weeks": week_list,
+        "months": months,
+        "totals": totals,
+        "groups": groups,
+        "flat_projects": [to_bar(it) for it in flat],
+        "chiefs_all": chiefs_all,
+        "kinds": sorted({it["kind"] for it in items if it["kind"]}, key=lambda s: (len(s), s)),
+        "today_offset": today_offset,
+        "find_results": find_results,
+        "do_find": do_find,
+        "skipped_invalid": skipped_invalid,
+        "week_px": PLAN_WEEK_PX,
+        "norm": norm,
+    }
