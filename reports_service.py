@@ -2,7 +2,7 @@ import datetime as dt
 from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
-from utils import format_date_ddmmyyyy, parse_date_from_ddmmyyyy
+from utils import format_contract_kind, format_date_ddmmyyyy, parse_date_from_ddmmyyyy
 from workdays import WorkdayCalendar, calendar_for_period
 
 
@@ -374,16 +374,6 @@ def planning_status_class(status: object) -> str:
     return "done"
 
 
-def _format_contract_kind(value: object) -> str:
-    if value is None or str(value).strip() == "":
-        return ""
-    try:
-        f = float(value)
-        return str(int(f)) if f == int(f) else str(f)
-    except (TypeError, ValueError):
-        return str(value).strip()
-
-
 def _planning_load_class(n: int, norm: int) -> Tuple[str, float]:
     """CSS-класс и прозрачность заливки для числа проектов руководителя в неделю."""
     if n <= 0:
@@ -450,7 +440,7 @@ def build_planning_report(
             {
                 "contract": contract,
                 "etap": etap,
-                "kind": _format_contract_kind(r.get("contract_kind")),
+                "kind": format_contract_kind(r.get("contract_kind")),
                 "client": str(r.get("client_name") or "").strip(),
                 "chief": str(r.get("project_chief") or "").strip() or PLAN_NO_CHIEF,
                 "status": status,

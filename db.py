@@ -467,7 +467,13 @@ def fetch_projects(
             project_chief,
             etap_sum,
             contr_sum,
-            act_date
+            act_date,
+            (SELECT COUNT(*) FROM tasks tk
+              WHERE tk.contract_number = projects.contract_number AND tk.etap_number = projects.etap_number
+                AND COALESCE(tk.task_status, '') <> 'Отмена') AS task_total,
+            (SELECT COUNT(*) FROM tasks tk
+              WHERE tk.contract_number = projects.contract_number AND tk.etap_number = projects.etap_number
+                AND tk.task_status = 'Выполнено') AS task_done
         FROM projects
     """
     if where:
