@@ -657,7 +657,19 @@ def _periods_overlap(start_a: str, end_a: str, start_b: str, end_b: str) -> bool
     return start_a <= end_b and start_b <= end_a
 
 
+def _worker_norm(name: str) -> str:
+    """«Сженова Н.Е» и «Сженова Н.Е.» — один и тот же сотрудник: сравниваем без регистра, точек и лишних пробелов."""
+    return "".join(ch for ch in name.casefold() if ch != "." and not ch.isspace())
+
+
+_NORM_PREFIX = "~norm~"
+
+
 def _worker_canonical_map(con: sqlite3.Connection) -> Dict[str, str]:
+    """
+    short_name / full_name -> short_name. В словарь входят все сотрудники, в том числе уволенные (enabled = 0):
+    их имена остаются в старых задачах. Под ключами с префиксом _NORM_PREFIX лежат нормализованные варианты имён.
+    """
     mapping: Dict[str, str] = {}
     rows = con.execute(
         "SELECT TRIM(short_name) AS short_name, TRIM(full_name) AS full_name FROM workers"
@@ -668,16 +680,23 @@ def _worker_canonical_map(con: sqlite3.Connection) -> Dict[str, str]:
         canonical = short_name or full_name
         if not canonical:
             continue
-        if short_name:
-            mapping[short_name] = canonical
-        if full_name:
-            mapping[full_name] = canonical
+        for variant in (short_name, full_name):
+            if variant:
+                mapping[variant] = canonical
+                mapping.setdefault(_NORM_PREFIX + _worker_norm(variant), canonical)
     return mapping
 
 
 def _canonical_worker(mapping: Dict[str, str], worker_name: str) -> str:
     name = worker_name.strip()
-    return mapping.get(name, name)
+    if name in mapping:
+        return mapping[name]
+    return mapping.get(_NORM_PREFIX + _worker_norm(name), name) if name else name
+
+
+def canonical_worker(mapping: Dict[str, str], worker_name: str) -> str:
+    """Публичная версия: имя сотрудника в виде short_name из таблицы workers (если такой сотрудник есть)."""
+    return _canonical_worker(mapping, worker_name or "")
 
 
 def _scheduled_task_periods(tasks: Sequence[Dict[str, Any]], mapping: Dict[str, str]) -> List[Tuple[str, str, str]]:
@@ -692,32 +711,56 @@ def _scheduled_task_periods(tasks: Sequence[Dict[str, Any]], mapping: Dict[str, 
     return periods
 
 
-def executor_has_overlapping_assignment(
+def _ru_date(iso: str) -> str:
+    return f"{iso[8:10]}.{iso[5:7]}.{iso[:4]}" if len(iso) >= 10 else iso
+
+
+def find_overlapping_assignment(
     *,
     contract_number: str,
     etap_number: str,
     tasks: Sequence[Dict[str, Any]],
-) -> bool:
+    check: Optional[Sequence[bool]] = None,
+) -> Optional[str]:
     """
-    True if the executor already has a task whose dates overlap the given period,
-    either among the tasks being saved or in another project/stage.
+    Описание конфликта, если у исполнителя уже есть задача с пересекающимися датами — среди сохраняемых задач
+    этапа или в другом проекте/этапе; None, если конфликтов нет.
+
+    check[i] = False означает «задача i не менялась» (имя исполнителя и даты те же, что в БД): она не проверяется
+    сама, но учитывается как занятый период для новых и изменённых задач. Так старые пересечения (например, отпуск,
+    введённый поверх проектных задач) не блокируют сохранение остальных задач этапа.
     """
     with get_connection() as con:
         mapping = _worker_canonical_map(con)
-        incoming = _scheduled_task_periods(tasks, mapping)
-        if not incoming:
-            return False
+        incoming: List[Tuple[str, str, str, bool]] = []
+        for idx, task in enumerate(tasks):
+            worker_name = str(task.get("worker_name") or "").strip()
+            start = _iso_date_ymd(task.get("task_start_date"))
+            end = _iso_date_ymd(task.get("task_end_date"))
+            if not worker_name or not start or not end:
+                continue
+            flag = True if check is None else bool(check[idx])
+            incoming.append((_canonical_worker(mapping, worker_name), start, end, flag))
+        if not any(item[3] for item in incoming):
+            return None
 
-        for i, (worker_a, start_a, end_a) in enumerate(incoming):
-            for worker_b, start_b, end_b in incoming[i + 1 :]:
-                if worker_a == worker_b and _periods_overlap(start_a, end_a, start_b, end_b):
-                    return True
+        for i, (worker_a, start_a, end_a, check_a) in enumerate(incoming):
+            for worker_b, start_b, end_b, check_b in incoming[i + 1 :]:
+                if (check_a or check_b) and worker_a == worker_b and _periods_overlap(start_a, end_a, start_b, end_b):
+                    return (
+                        f"{worker_a}: в этом этапе уже есть задача с пересекающимися датами "
+                        f"({_ru_date(start_b)} — {_ru_date(end_b)})."
+                    )
 
-        worker_keys = {p[0] for p in incoming}
+        worker_keys = {item[0] for item in incoming if item[3]}
+        # Все написания имён, под которыми этих сотрудников видно в задачах (включая опечатки вроде «Сженова Н.Е»).
         name_list: List[str] = []
         for stored_name, canonical in mapping.items():
-            if canonical in worker_keys:
+            if canonical in worker_keys and not stored_name.startswith(_NORM_PREFIX):
                 name_list.append(stored_name)
+        for (stored,) in con.execute("SELECT DISTINCT TRIM(COALESCE(worker_name, '')) FROM tasks").fetchall():
+            if stored and stored not in name_list and _canonical_worker(mapping, stored) in worker_keys:
+                name_list.append(stored)
         for key in worker_keys:
             if key not in name_list:
                 name_list.append(key)
@@ -726,6 +769,8 @@ def executor_has_overlapping_assignment(
         rows = con.execute(
             f"""
             SELECT TRIM(worker_name) AS worker_name,
+                   contract_number AS contract_number,
+                   etap_number AS etap_number,
                    date(task_start_date) AS task_start_date,
                    date(task_end_date) AS task_end_date
             FROM tasks
@@ -737,20 +782,40 @@ def executor_has_overlapping_assignment(
             [*name_list, contract_number, etap_number],
         ).fetchall()
 
-        existing: List[Tuple[str, str, str]] = []
+        existing: List[Tuple[str, str, str, str, str]] = []
         for row in rows:
             start = row["task_start_date"]
             end = row["task_end_date"]
             worker_name = (row["worker_name"] or "").strip()
             if not worker_name or not start or not end:
                 continue
-            existing.append((_canonical_worker(mapping, worker_name), str(start), str(end)))
+            existing.append(
+                (_canonical_worker(mapping, worker_name), str(start), str(end), str(row["contract_number"]), str(row["etap_number"]))
+            )
 
-        for worker_a, start_a, end_a in incoming:
-            for worker_b, start_b, end_b in existing:
+        for worker_a, start_a, end_a, check_a in incoming:
+            if not check_a:
+                continue
+            for worker_b, start_b, end_b, contract_b, etap_b in existing:
                 if worker_a == worker_b and _periods_overlap(start_a, end_a, start_b, end_b):
-                    return True
-        return False
+                    return (
+                        f"{worker_a} уже занят(а) в этот период: договор {contract_b}, этап {etap_b} "
+                        f"({_ru_date(start_b)} — {_ru_date(end_b)})."
+                    )
+        return None
+
+
+def executor_has_overlapping_assignment(
+    *,
+    contract_number: str,
+    etap_number: str,
+    tasks: Sequence[Dict[str, Any]],
+) -> bool:
+    """True, если у исполнителя уже есть задача, пересекающаяся по датам (см. find_overlapping_assignment)."""
+    return (
+        find_overlapping_assignment(contract_number=contract_number, etap_number=etap_number, tasks=tasks)
+        is not None
+    )
 
 
 def replace_project_tasks(contract_number: str, etap_number: str, tasks: List[Dict[str, Any]]) -> None:

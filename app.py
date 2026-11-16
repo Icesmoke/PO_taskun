@@ -59,9 +59,11 @@ from db import (
     delete_voyage_by_rid,
     delete_contracter_by_rid,
     executor_has_overlapping_assignment,
+    find_overlapping_assignment,
     replace_project_tasks,
     update_project_fields,
     update_task_status,
+    canonical_worker,
     fetch_worker_canonical_map,
     fetch_report_filters,
     save_report_filters,
@@ -666,7 +668,7 @@ def create_app() -> Flask:
             "id": t.get("task_id"),
             "name": text(t.get("task_name")),
             "desc": text(t.get("task_adenda")),
-            "worker": canon.get(worker, worker),
+            "worker": canonical_worker(canon, worker),
             "status": text(t.get("task_status")),
             "start": iso(t.get("task_start_date")),
             "end": iso(t.get("task_end_date")),
@@ -1770,7 +1772,14 @@ def create_app() -> Flask:
         except Exception:
             count = 0
 
-        allowed_workers = set(fetch_worker_short_names())
+        # Исполнители: активные сотрудники + те, кто уже назначен на задачи этого этапа. Иначе нельзя сохранить
+        # этап, где остались задачи уволенного сотрудника (enabled = 0) или имя записано с опечаткой.
+        canon_map = fetch_worker_canonical_map()
+        allowed_workers = {canonical_worker(canon_map, w) for w in fetch_worker_short_names()}
+        for existing in fetch_project_tasks(contract_number, etap_number):
+            name = str(existing.get("worker_name") or "").strip()
+            if name:
+                allowed_workers.add(canonical_worker(canon_map, name))
         allowed_statuses = set(fetch_task_statuses())
         tasks: List[Dict[str, Any]] = []
         card_url = url_for("project_card", contract_number=contract_number, etap_number=etap_number)
@@ -1803,8 +1812,12 @@ def create_app() -> Flask:
             if not has_data:
                 continue
 
-            if t["worker_name"] and t["worker_name"] not in allowed_workers:
-                flash("Некорректный исполнитель задачи.", "error")
+            if t["worker_name"] and canonical_worker(canon_map, t["worker_name"]) not in allowed_workers:
+                flash(
+                    f"Некорректный исполнитель задачи: «{t['worker_name']}». Выберите активного сотрудника из списка "
+                    "(уволенного можно оставить только на уже существующих задачах).",
+                    "error",
+                )
                 return redirect(card_url)
             if t["task_status"] and t["task_status"] not in allowed_statuses:
                 flash("Некорректный статус задачи.", "error")
@@ -1823,12 +1836,37 @@ def create_app() -> Flask:
             t["task_end_date"] = normalize_sqlite_timestamp_date(end_raw) if end_raw else ""
             tasks.append(t)
 
-        if executor_has_overlapping_assignment(
+        # Пересечения проверяем только у новых и изменённых задач: старые конфликты (например, отпуск поверх
+        # проектных задач) не должны мешать сохранить остальные задачи этапа.
+        stored_signatures: Dict[Tuple[str, str, str], int] = {}
+        for existing in fetch_project_tasks(contract_number, etap_number):
+            sig = (
+                canonical_worker(canon_map, str(existing.get("worker_name") or "")),
+                str(existing.get("task_start_date") or "")[:10],
+                str(existing.get("task_end_date") or "")[:10],
+            )
+            stored_signatures[sig] = stored_signatures.get(sig, 0) + 1
+        changed_flags: List[bool] = []
+        for task in tasks:
+            sig = (
+                canonical_worker(canon_map, task["worker_name"]),
+                str(task.get("task_start_date") or "")[:10],
+                str(task.get("task_end_date") or "")[:10],
+            )
+            if stored_signatures.get(sig, 0) > 0:
+                stored_signatures[sig] -= 1
+                changed_flags.append(False)
+            else:
+                changed_flags.append(True)
+
+        conflict = find_overlapping_assignment(
             contract_number=contract_number,
             etap_number=etap_number,
             tasks=tasks,
-        ):
-            flash("Исполнитель имеет задачу в этом периоде времени", "error")
+            check=changed_flags,
+        )
+        if conflict:
+            flash(f"Исполнитель имеет задачу в этом периоде времени. {conflict}", "error")
             return redirect(card_url)
 
         replace_project_tasks(contract_number, etap_number, tasks)
